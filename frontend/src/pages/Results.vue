@@ -37,7 +37,6 @@
                 <span class="pts">{{ s.points }}</span>
               </li>
             </ol>
-            <RouterLink to="/" class="btn-ghost btn-block">← Back to start</RouterLink>
           </div>
         </template>
       </div>
