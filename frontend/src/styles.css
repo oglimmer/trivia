@@ -805,6 +805,166 @@ label {
   box-shadow: 2px 2px 0 var(--ink);
 }
 
+/* ---------- Stepper (guided flow) ---------- */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 2px;
+}
+.stepper__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.stepper__dot {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--bw) solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.stepper__step.active .stepper__dot {
+  background: var(--yellow);
+  transform: rotate(-4deg);
+}
+.stepper__step.done .stepper__dot {
+  background: var(--mint);
+}
+.stepper__label {
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stepper__step.active .stepper__label { color: var(--ink); }
+.stepper__step.done .stepper__label { color: var(--ink); }
+.stepper__bar {
+  flex: 1;
+  height: 3px;
+  background: var(--ink);
+  opacity: .25;
+  border-radius: 2px;
+  min-width: 8px;
+}
+.stepper__bar.done { opacity: 1; background: var(--mint); }
+
+@media (max-width: 480px) {
+  .stepper__label { display: none; }
+  .stepper { gap: 6px; }
+}
+
+/* ---------- Path choice cards (AI / manual) ---------- */
+.path-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  width: 100%;
+  padding: 16px;
+  background: var(--paper);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  transition: transform .08s ease, box-shadow .08s ease, background .15s ease;
+}
+.path-card:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--ink); }
+.path-card:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+.path-card--ai { background: var(--blue-2); }
+.path-card__icon {
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  background: var(--yellow);
+  border: var(--bw) solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.path-card--ai .path-card__icon { background: var(--blue); color: var(--paper); }
+.path-card__body { flex: 1; min-width: 0; }
+.path-card__title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 1.25rem;
+  line-height: 1.05;
+  margin: 0 0 4px;
+}
+.path-card__desc {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+.path-card__chev {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 1.4rem;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+/* ---------- Photo strip (step 2 preview) ---------- */
+.photo-strip {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r);
+  background: var(--cream-2);
+  border: var(--bw) solid var(--ink);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.photo-strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- Photo summary row (step 3) ---------- */
+.photo-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--cream-2);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-1);
+}
+.photo-thumb {
+  width: 64px; height: 64px;
+  object-fit: cover;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: 2px 2px 0 var(--ink);
+  flex-shrink: 0;
+  display: block;
+}
+.photo-summary__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.photo-summary__label {
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.photo-summary .btn-link { padding: 2px 0; }
+
 /* ---------- Footer ---------- */
 .foot {
   margin-top: 28px;

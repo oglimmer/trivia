@@ -5,18 +5,80 @@
         <div style="font-size: 3rem; line-height: 1;">🎉</div>
         <h1>Locked in!</h1>
         <p>Your question is ready. Sit tight — the host kicks things off in a moment.</p>
-        <button class="btn-ghost" @click="editing = true">← Edit my question</button>
+        <button class="btn-ghost" @click="startEdit">← Edit my question</button>
       </div>
 
-      <div v-else key="editing" class="card stack">
+      <!-- Step 1: Photo -->
+      <div v-else-if="step === 'photo'" key="photo" class="card stack">
+        <Stepper :current="1" :photo="photo" />
+        <div class="row between">
+          <h1 style="margin: 0;">Snap a photo</h1>
+          <span class="tag tag--yellow">1 of 3</span>
+        </div>
+        <p class="muted" style="margin-top: -4px;">
+          Start with a photo of something tricky to identify. You'll write the question next.
+        </p>
+
+        <PhotoPicker v-model="photo" />
+
+        <button class="btn-primary btn-lg btn-block" :disabled="!photo" @click="step = 'ai-choice'">
+          Continue →
+        </button>
+        <button v-if="saved" class="btn-link" @click="cancelEdit">Cancel</button>
+      </div>
+
+      <!-- Step 2: AI or manual -->
+      <div v-else-if="step === 'ai-choice'" key="ai-choice" class="card stack">
+        <Stepper :current="2" :photo="photo" />
+        <div class="row between">
+          <h1 style="margin: 0;">How should we make it?</h1>
+          <span class="tag tag--yellow">2 of 3</span>
+        </div>
+        <p class="muted" style="margin-top: -4px;">
+          Let AI suggest a question for your photo, or write your own.
+        </p>
+
+        <div class="photo-strip">
+          <img :src="photo" alt="" />
+        </div>
+
+        <button class="path-card path-card--ai" @click="useAIPath">
+          <div class="path-card__icon" aria-hidden="true">✨</div>
+          <div class="path-card__body">
+            <div class="path-card__title">Help me with AI</div>
+            <div class="path-card__desc">Generate a question and answer options from my photo.</div>
+          </div>
+          <div class="path-card__chev" aria-hidden="true">→</div>
+        </button>
+        <button class="path-card" @click="useManualPath">
+          <div class="path-card__icon" aria-hidden="true">✍️</div>
+          <div class="path-card__body">
+            <div class="path-card__title">I'll write it myself</div>
+            <div class="path-card__desc">Type the question and pick the answer manually.</div>
+          </div>
+          <div class="path-card__chev" aria-hidden="true">→</div>
+        </button>
+
+        <div v-if="err" class="error">{{ err }}</div>
+        <button class="btn-link" @click="step = 'photo'">← Back to photo</button>
+      </div>
+
+      <!-- Step 3: Editor -->
+      <div v-else key="editor" class="card stack">
+        <Stepper :current="3" :photo="photo" />
         <div class="row between">
           <h1 style="margin: 0;">Your question</h1>
-          <span class="tag tag--yellow">1 each</span>
+          <span class="tag tag--yellow">3 of 3</span>
         </div>
-        <p class="muted" style="margin-top: -4px;">Snap a photo, write a question, set the right answer.</p>
+        <p class="muted" style="margin-top: -4px;">Write the question and set the right answer.</p>
 
-        <label>Photo</label>
-        <PhotoPicker v-model="photo" />
+        <div class="photo-summary">
+          <img class="photo-thumb" :src="photo" alt="" />
+          <div class="photo-summary__meta">
+            <div class="photo-summary__label">Photo</div>
+            <button class="btn-link" @click="step = 'photo'">Change photo</button>
+          </div>
+        </div>
 
         <label>Question</label>
         <textarea v-model="text" placeholder="What is this thing?" maxlength="160" rows="3"></textarea>
@@ -72,7 +134,7 @@
         </template>
 
         <div v-if="!aiConfirm" class="row">
-          <button class="btn-blue btn-block" @click="requestAI" :disabled="!photo || aiBusy">
+          <button class="btn-blue btn-block" @click="requestAI" :disabled="aiBusy">
             <span aria-hidden="true">✨</span>
             {{ aiBusy ? 'Thinking…' : 'Help me with AI' }}
           </button>
@@ -89,7 +151,7 @@
           <button class="btn-primary btn-lg flex-1" :disabled="!canSubmit || loading" @click="save">
             {{ loading ? 'Saving…' : (saved ? 'Update question' : 'Save question') }}
           </button>
-          <button v-if="saved" class="btn-ghost" @click="editing = false">Cancel</button>
+          <button v-if="saved" class="btn-ghost" @click="cancelEdit">Cancel</button>
         </div>
         <div v-if="err" class="error">{{ err }}</div>
       </div>
@@ -122,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '../components/PhotoPicker.vue'
 import { api } from '../services/api.js'
@@ -145,6 +207,32 @@ const editing = ref(false)
 const err = ref('')
 const aiBusy = ref(false)
 const aiConfirm = ref(false)
+const step = ref('photo')            // 'photo' | 'ai-choice' | 'editor'
+
+const Stepper = {
+  props: ['current', 'photo'],
+  setup(p) {
+    return () => {
+      const steps = [
+        { n: 1, label: 'Photo' },
+        { n: 2, label: 'AI?' },
+        { n: 3, label: 'Details' },
+      ]
+      const nodes = []
+      steps.forEach((s, i) => {
+        const state = s.n < p.current ? 'done' : s.n === p.current ? 'active' : ''
+        nodes.push(h('div', { class: ['stepper__step', state] }, [
+          h('div', { class: 'stepper__dot' }, state === 'done' ? '✓' : String(s.n)),
+          h('div', { class: 'stepper__label' }, s.label),
+        ]))
+        if (i < steps.length - 1) {
+          nodes.push(h('div', { class: ['stepper__bar', s.n < p.current ? 'done' : ''] }))
+        }
+      })
+      return h('div', { class: 'stepper', 'aria-label': `Step ${p.current} of 3` }, nodes)
+    }
+  },
+}
 
 const users = computed(() => store.users)
 
@@ -209,6 +297,44 @@ function hydrateFromQuestion(q) {
 function removeOption(i) {
   options.value.splice(i, 1)
   if (correctIdx.value >= options.value.length) correctIdx.value = 0
+}
+
+function startEdit() {
+  editing.value = true
+  step.value = 'editor'
+}
+
+function cancelEdit() {
+  editing.value = false
+  err.value = ''
+}
+
+function useManualPath() {
+  err.value = ''
+  step.value = 'editor'
+}
+
+async function useAIPath() {
+  err.value = ''
+  aiBusy.value = true
+  try {
+    const r = await api.aiSuggest({
+      hint: '',
+      answerType: 'choice',
+      photoB64: photo.value,
+    })
+    answerType.value = 'choice'
+    text.value = r.text || ''
+    if (Array.isArray(r.options) && r.options.length >= 2) {
+      options.value = r.options.slice(0, 4)
+      correctIdx.value = Number(r.correct) || 0
+    }
+    step.value = 'editor'
+  } catch (e) {
+    err.value = 'AI: ' + (e.message || 'failed')
+  } finally {
+    aiBusy.value = false
+  }
 }
 
 async function save() {
