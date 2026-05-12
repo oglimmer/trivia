@@ -100,6 +100,57 @@ func (h *Hub) BroadcastTo(gameID string, msg any, match func(c *Client) bool) {
 	}
 }
 
+// OnlinePlayers returns the set of distinct player userIDs currently connected
+// to the given room.
+func (h *Hub) OnlinePlayers(gameID string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	seen := make(map[string]struct{})
+	for c := range h.rooms[gameID] {
+		if c.Role == RolePlayer && c.UserID != "" {
+			seen[c.UserID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	return out
+}
+
+// IsPlayerOnline reports whether the given player has at least one live
+// connection in the room.
+func (h *Hub) IsPlayerOnline(gameID, userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.rooms[gameID] {
+		if c.Role == RolePlayer && c.UserID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// OnlinePlayerCounts returns gameID -> number of distinct online players, for
+// all rooms with at least one player connection.
+func (h *Hub) OnlinePlayerCounts() map[string]int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make(map[string]int)
+	for gameID, room := range h.rooms {
+		seen := make(map[string]struct{})
+		for c := range room {
+			if c.Role == RolePlayer && c.UserID != "" {
+				seen[c.UserID] = struct{}{}
+			}
+		}
+		if len(seen) > 0 {
+			out[gameID] = len(seen)
+		}
+	}
+	return out
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,

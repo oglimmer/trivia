@@ -27,8 +27,12 @@
         </div>
         <div class="game-row__meta">
           <div class="bold">{{ g.name || '(untitled)' }}</div>
-          <div class="muted" style="font-size: .85rem;">
+          <div class="row" style="gap: 8px; font-size: .85rem; align-items: center;">
             <span :class="['state-pill', `state-${g.state}`]">{{ g.state }}</span>
+            <span class="presence-pill" :class="{ 'presence-pill--on': g.onlineCount > 0 }">
+              <span class="presence-dot"></span>
+              {{ g.onlineCount || 0 }} online
+            </span>
           </div>
         </div>
         <div class="row" style="gap: 8px;">
@@ -46,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api.js'
 import { useGameStore } from '../stores/game.js'
@@ -60,10 +64,16 @@ const deleting = ref('')
 const err = ref('')
 const router = useRouter()
 const store = useGameStore()
+let presencePoll = null
 
 onMounted(async () => {
   if (!localStorage.getItem('adminToken')) { router.replace('/admin'); return }
   await refresh()
+  presencePoll = setInterval(refresh, 5000)
+})
+
+onUnmounted(() => {
+  if (presencePoll) clearInterval(presencePoll)
 })
 
 async function refresh() {
@@ -149,6 +159,32 @@ async function remove(g) {
 .state-pill.state-setup    { background: var(--blue-2); }
 .state-pill.state-game     { background: var(--pink); color: var(--paper); }
 .state-pill.state-finished { background: var(--mint-2); }
+
+.presence-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  font-weight: 700;
+  letter-spacing: .04em;
+  font-size: .7rem;
+  background: var(--paper);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.presence-pill .presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.presence-pill--on { color: var(--ink); }
+.presence-pill--on .presence-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
 
 @media (max-width: 520px) {
   .game-row { grid-template-columns: 1fr; }

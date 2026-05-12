@@ -60,12 +60,15 @@
       <div class="card">
         <div class="row between" style="margin-bottom: 12px;">
           <h2 style="margin: 0;">Players</h2>
-          <span class="tag tag--blue">{{ users.length }}</span>
+          <span class="tag tag--blue">{{ onlineCount }} / {{ users.length }} online</span>
         </div>
         <ul class="ladder">
           <li v-for="u in users" :key="u.id">
-            <img class="avatar" :src="u.photoB64" :alt="u.name" />
-            <span class="bold">{{ u.name }}</span>
+            <span class="avatar-wrap">
+              <img class="avatar" :src="u.photoB64" :alt="u.name" />
+              <span class="presence-dot" :class="{ 'presence-dot--on': online.has(u.id) }" :title="online.has(u.id) ? 'Online' : 'Offline'"></span>
+            </span>
+            <span class="bold" :class="{ 'muted': !online.has(u.id) }">{{ u.name }}</span>
             <span class="pts" :style="`color: ${hasQuestion(u.id) ? 'var(--mint)' : 'var(--muted)'};`">
               {{ hasQuestion(u.id) ? '✓ ready' : 'thinking…' }}
             </span>
@@ -121,7 +124,10 @@
         </div>
         <div class="row wrap" style="gap: 10px;">
           <div v-for="u in answeredUsers" :key="u.id" class="who" style="box-shadow: 2px 2px 0 var(--ink);">
-            <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+            <span class="avatar-wrap">
+              <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+              <span class="presence-dot presence-dot--sm" :class="{ 'presence-dot--on': online.has(u.id) }"></span>
+            </span>
             <div class="who__meta"><span class="who__name">{{ u.name }}</span></div>
           </div>
         </div>
@@ -175,6 +181,7 @@ const questions = ref([])
 const currentQ = ref(null)
 const leaderboard = ref([])
 const playerAnswered = ref(new Set())
+const online = ref(new Set())
 const err = ref('')
 const elapsed = ref(0)
 let tick = null
@@ -182,6 +189,7 @@ let stopListening = null
 const letters = ['A', 'B', 'C', 'D']
 
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
+const onlineCount = computed(() => users.value.filter(u => online.value.has(u.id)).length)
 
 function userName(id) {
   const u = users.value.find(u => u.id === id)
@@ -197,6 +205,7 @@ async function load() {
     game.value = r.game
     users.value = r.users || []
     questions.value = r.questions || []
+    online.value = new Set(r.online || [])
   } catch (e) {
     if (String(e.message).toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin'); return
@@ -230,6 +239,7 @@ onMounted(async () => {
     else if (m.type === 'users') users.value = m.data
     else if (m.type === 'questionsAdmin') questions.value = m.data
     else if (m.type === 'playerAnswered') playerAnswered.value.add(m.data.userId)
+    else if (m.type === 'presence') online.value = new Set(m.data.online || [])
   })
   wsConnectAdmin(localStorage.getItem('adminToken'), props.code)
 
@@ -301,4 +311,27 @@ async function next() {
 .state-pill.state-setup    { background: var(--blue-2); }
 .state-pill.state-game     { background: var(--pink); color: var(--paper); }
 .state-pill.state-finished { background: var(--mint-2); }
+
+.avatar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.presence-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #9ca3af;
+  border: 2px solid var(--paper);
+  box-sizing: border-box;
+}
+.presence-dot--on { background: #22c55e; }
+.presence-dot--sm {
+  width: 10px;
+  height: 10px;
+  right: -1px;
+  bottom: -1px;
+}
 </style>

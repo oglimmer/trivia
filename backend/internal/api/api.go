@@ -38,6 +38,7 @@ func New(d *db.DB, h *ws.Hub, c *ai.Client) *Server {
 	s := &Server{DB: d, Hub: h, AI: c, gameLocks: map[string]*sync.Mutex{}}
 	h.OnRecv = s.onWSMessage
 	h.OnJoin = s.onWSJoin
+	h.OnLeave = s.onWSLeave
 	return s
 }
 
@@ -157,7 +158,23 @@ func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, 200, gs)
+	counts := s.Hub.OnlinePlayerCounts()
+	out := make([]map[string]any, 0, len(gs))
+	for _, g := range gs {
+		out = append(out, map[string]any{
+			"id":                g.ID,
+			"code":              g.Code,
+			"name":              g.Name,
+			"state":             g.State,
+			"currentQuestionId": g.CurrentQuestionID,
+			"questionState":     g.QuestionState,
+			"questionStartedAt": g.QuestionStartedAt,
+			"questionClosedAt":  g.QuestionClosedAt,
+			"createdAt":         g.CreatedAt,
+			"onlineCount":       counts[g.ID],
+		})
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +208,7 @@ func (s *Server) adminGame(w http.ResponseWriter, r *http.Request) {
 		"game":      g,
 		"users":     users,
 		"questions": qs,
+		"online":    s.Hub.OnlinePlayers(g.ID),
 	})
 }
 
@@ -665,7 +683,28 @@ func (s *Server) onWSJoin(c *ws.Client) {
 		if qs, err := s.DB.ListQuestions(ctx, c.GameID, true); err == nil {
 			c.Send(map[string]any{"type": "questionsAdmin", "data": qs})
 		}
+		c.Send(s.presenceEnvelope(c.GameID))
+	} else if c.Role == ws.RolePlayer {
+		s.broadcastPresence(c.GameID)
 	}
+}
+
+func (s *Server) onWSLeave(c *ws.Client) {
+	if c.Role == ws.RolePlayer {
+		s.broadcastPresence(c.GameID)
+	}
+}
+
+func (s *Server) presenceEnvelope(gameID string) map[string]any {
+	return map[string]any{
+		"type": "presence",
+		"data": map[string]any{"online": s.Hub.OnlinePlayers(gameID)},
+	}
+}
+
+func (s *Server) broadcastPresence(gameID string) {
+	msg := s.presenceEnvelope(gameID)
+	s.Hub.BroadcastTo(gameID, msg, func(c *ws.Client) bool { return c.Role == ws.RoleAdmin })
 }
 
 type wsInbound struct {
