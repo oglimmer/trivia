@@ -1,34 +1,46 @@
 <template>
-  <main class="stack">
+  <main class="stack-lg">
     <div class="card stack">
-      <h1>Games</h1>
-
-      <div class="row">
-        <input v-model="name" placeholder="Event name (optional)" />
+      <div class="row between">
+        <h1 style="margin: 0;">Games</h1>
+        <span class="tag tag--admin">Host</span>
       </div>
+      <p class="muted" style="margin: -4px 0 0;">Spin up a room, share the code, let chaos begin.</p>
+
+      <label for="game-name">Event name</label>
+      <input id="game-name" v-model="name" placeholder="e.g. Family dinner — May 2025" />
+
+      <label for="game-code">Code (optional)</label>
       <div class="row">
-        <input v-model="code" placeholder="Code (blank = random)" maxlength="8" />
-        <button class="btn-primary" :disabled="loading" @click="create">
+        <input id="game-code" v-model="code" placeholder="Random if blank" maxlength="8" class="mono" style="letter-spacing: .15em; text-transform: lowercase;" />
+        <button class="btn-primary" :disabled="loading" @click="create" style="flex-shrink: 0;">
           {{ loading ? '…' : 'Create' }}
         </button>
       </div>
       <div v-if="err" class="error">{{ err }}</div>
     </div>
 
-    <div class="stack">
-      <div v-for="g in games" :key="g.id" class="card row between">
-        <div>
-          <div style="font-size: 1.2rem; font-weight: 600;">{{ g.code }}</div>
-          <div class="muted" style="font-size: .85rem;">{{ g.name || '(no name)' }} · {{ g.state }}</div>
+    <div v-if="games.length" class="stack">
+      <div v-for="g in games" :key="g.id" class="card game-row">
+        <div class="game-row__code">
+          <span class="mono">{{ g.code }}</span>
+        </div>
+        <div class="game-row__meta">
+          <div class="bold">{{ g.name || '(untitled)' }}</div>
+          <div class="muted" style="font-size: .85rem;">
+            <span :class="['state-pill', `state-${g.state}`]">{{ g.state }}</span>
+          </div>
         </div>
         <div class="row" style="gap: 8px;">
-          <RouterLink :to="`/admin/games/${g.code}`" class="btn-primary">Open</RouterLink>
-          <button class="btn-danger" :disabled="deleting === g.code" @click="remove(g)">
+          <RouterLink :to="`/admin/games/${g.code}`" class="btn-primary btn-sm">Open →</RouterLink>
+          <button class="btn-danger btn-sm" :disabled="deleting === g.code" @click="remove(g)">
             {{ deleting === g.code ? '…' : 'Delete' }}
           </button>
         </div>
       </div>
-      <div v-if="games.length === 0" class="card center muted">No games yet.</div>
+    </div>
+    <div v-else class="card card--cream center muted">
+      <p style="margin: 0;">No games yet — create one above.</p>
     </div>
   </main>
 </template>
@@ -83,11 +95,11 @@ async function remove(g) {
   const label = g.name ? `"${g.name}" (${g.code})` : g.code
   const ok = await confirm({
     title: `Delete ${label}?`,
-    message: 'This permanently removes the game, its players, questions, and answers. This action cannot be undone.',
+    message: 'This permanently removes the game, its players, questions, and answers. This cannot be undone.',
     confirmLabel: 'Delete',
     cancelLabel: 'Keep',
     tone: 'danger',
-    icon: '🗑️',
+    icon: '🗑',
   })
   if (!ok) return
   err.value = ''
@@ -101,5 +113,45 @@ async function remove(g) {
     deleting.value = ''
   }
 }
-
 </script>
+
+<style scoped>
+.game-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+.game-row__code {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: .12em;
+  padding: 10px 14px;
+  background: var(--yellow);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: 3px 3px 0 var(--ink);
+  text-transform: lowercase;
+}
+.state-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: .72rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+.state-pill.state-setup    { background: var(--blue-2); }
+.state-pill.state-game     { background: var(--pink); color: var(--paper); }
+.state-pill.state-finished { background: var(--mint-2); }
+
+@media (max-width: 520px) {
+  .game-row { grid-template-columns: 1fr; }
+  .game-row__code { justify-self: flex-start; }
+}
+</style>

@@ -1,40 +1,50 @@
 <template>
-  <main class="stack">
-    <!-- Phase: cinematic reveal of 3 -> 2 -> 1 then ladder -->
+  <main class="stack-lg">
     <transition name="fade" mode="out-in">
-      <div :key="phase" class="card stack" v-if="leaderboard.length">
+      <div :key="phase" v-if="leaderboard.length">
         <template v-if="phase === 'three'">
-          <h2 class="center">🥉 In third place…</h2>
-          <Spotlight :score="byRank[2]" rank="3" color="bronze" />
-          <button class="btn-primary" @click="phase = 'two'">Next →</button>
+          <div class="card stack">
+            <h2 class="center" style="margin: 0;">In third place…</h2>
+            <Spotlight :score="byRank[2]" rank="3" color="bronze" />
+            <button class="btn-primary btn-lg btn-block" @click="phase = 'two'">Next →</button>
+          </div>
         </template>
 
         <template v-else-if="phase === 'two'">
-          <h2 class="center">🥈 In second place…</h2>
-          <Spotlight :score="byRank[1]" rank="2" color="silver" />
-          <button class="btn-primary" @click="phase = 'one'">Next →</button>
+          <div class="card stack">
+            <h2 class="center" style="margin: 0;">In second place…</h2>
+            <Spotlight :score="byRank[1]" rank="2" color="silver" />
+            <button class="btn-primary btn-lg btn-block" @click="phase = 'one'">Next →</button>
+          </div>
         </template>
 
         <template v-else-if="phase === 'one'">
-          <h2 class="center">🥇 The winner is…</h2>
-          <Spotlight :score="byRank[0]" rank="1" color="gold" big />
-          <button class="btn-accent" @click="phase = 'ladder'">Show full ladder</button>
+          <div class="card stack">
+            <h2 class="center" style="margin: 0;">The winner is…</h2>
+            <Spotlight :score="byRank[0]" rank="1" color="gold" big />
+            <button class="btn-warn btn-lg btn-block" @click="phase = 'ladder'">Show full ladder →</button>
+          </div>
         </template>
 
         <template v-else>
-          <h2>Final standings</h2>
-          <ol class="ladder">
-            <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
-              <span class="rank">{{ i + 1 }}</span>
-              <img class="avatar" :src="s.photoB64" :alt="s.userName" />
-              <span>{{ s.userName }}</span>
-              <span class="pts">{{ s.points }} pts</span>
-            </li>
-          </ol>
-          <RouterLink to="/" class="btn-ghost">← Back to start</RouterLink>
+          <div class="card stack">
+            <h1>Final standings</h1>
+            <ol class="ladder">
+              <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
+                <span class="rank">{{ i + 1 }}</span>
+                <img class="avatar" :src="s.photoB64" :alt="s.userName" />
+                <span class="bold">{{ s.userName }}</span>
+                <span class="pts">{{ s.points }}</span>
+              </li>
+            </ol>
+            <RouterLink to="/" class="btn-ghost btn-block">← Back to start</RouterLink>
+          </div>
         </template>
       </div>
-      <div v-else class="card center muted">Waiting for results…</div>
+      <div v-else class="card card--cream center stack">
+        <div class="spinner" aria-hidden="true"></div>
+        <span class="muted">Tallying scores…</span>
+      </div>
     </transition>
   </main>
 </template>
@@ -59,7 +69,6 @@ onMounted(async () => {
   try {
     store.leaderboard = await api.leaderboard(props.code)
   } catch {}
-  // If fewer than 3 players, skip ahead
   if (leaderboard.value.length < 3) phase.value = leaderboard.value.length === 0 ? 'ladder' : 'one'
 })
 </script>

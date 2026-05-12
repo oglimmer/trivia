@@ -2,18 +2,18 @@
   <header class="app-header">
     <div class="app-header__inner">
       <RouterLink to="/" class="brand" aria-label="Trivia home">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9.5a2.5 2.5 0 1 1 4.3 1.7c-.9.8-1.8 1.4-1.8 2.6" />
-          <circle cx="12" cy="17" r=".5" fill="currentColor" />
-        </svg>
-        <span>Trivia</span>
+        <span class="brand__mark" aria-hidden="true">T</span>
+        <span class="brand__name">Trivia<em class="brand__dot">.</em></span>
       </RouterLink>
 
       <nav class="app-header__nav">
-        <span v-if="store.connected !== null" :class="['conn', store.connected ? 'conn--live' : 'conn--off']" :title="store.connected ? 'Connected' : 'Reconnecting…'">
+        <span
+          v-if="store.connected !== null"
+          :class="['conn', store.connected ? 'conn--live' : 'conn--off']"
+          :title="store.connected ? 'Connected' : 'Reconnecting…'"
+        >
           <span class="conn__dot" aria-hidden="true"></span>
-          {{ store.connected ? 'live' : 'offline' }}
+          {{ store.connected ? 'Live' : 'Off' }}
         </span>
 
         <template v-if="store.me">
@@ -34,11 +34,15 @@
       </nav>
     </div>
   </header>
+
   <RouterView v-slot="{ Component }">
     <transition name="fade" mode="out-in">
       <component :is="Component" />
     </transition>
   </RouterView>
+
+  <footer class="foot">made for game night ★ no big tech, just friends</footer>
+
   <ConfirmDialog />
 </template>
 
@@ -72,3 +76,11 @@ function signOutAdmin() {
   router.push('/admin')
 }
 </script>
+
+<style scoped>
+.brand__name { line-height: 1; }
+.brand__dot {
+  font-style: italic;
+  color: var(--pink);
+}
+</style>

@@ -1,17 +1,20 @@
 <template>
-  <main class="stack">
-    <div class="card stack">
-      <h1>Join {{ code }}</h1>
-      <p class="muted">Tell us who you are. Your photo shows up on leaderboards.</p>
+  <main class="stack-lg">
+    <div class="card card--yellow stack">
+      <span class="tag tag--pink" style="align-self: flex-start;">Game · {{ code }}</span>
+      <h1>Who's playing?</h1>
+      <p class="muted">Your name &amp; photo will pop up on the leaderboard.</p>
+    </div>
 
-      <label>Your name</label>
-      <input v-model="name" placeholder="e.g. Sam" maxlength="40" />
+    <div class="card stack">
+      <label for="player-name">Your name</label>
+      <input id="player-name" v-model="name" placeholder="e.g. Sam" maxlength="40" />
 
       <label>Your photo</label>
       <PhotoPicker v-model="photo" />
 
-      <button class="btn-primary" :disabled="!canSubmit || loading" @click="submit">
-        {{ loading ? 'Joining…' : 'Join game' }}
+      <button class="btn-primary btn-lg btn-block" :disabled="!canSubmit || loading" @click="submit">
+        {{ loading ? 'Joining…' : "Let's go →" }}
       </button>
       <div v-if="err" class="error">{{ err }}</div>
     </div>

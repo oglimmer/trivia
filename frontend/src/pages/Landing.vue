@@ -1,32 +1,38 @@
 <template>
-  <main class="stack" style="padding-top: 32px;">
-    <div class="card stack center">
-      <div style="font-size: 3rem; line-height: 1;">🎯</div>
-      <h1>Join a game</h1>
-      <p class="muted">Enter the 4-character code from your host.</p>
+  <main class="stack-lg" style="padding-top: 12px;">
+    <section class="hero">
+      <span class="hero__sparkle s1" aria-hidden="true">✦</span>
+      <span class="hero__sparkle s2" aria-hidden="true">✦</span>
+      <span class="hero__sparkle s3" aria-hidden="true">★</span>
+
+      <span class="hero__eyebrow">Bring-your-own-question</span>
+      <h1 class="hero__title">Game <em>night</em>,<br />made by you.</h1>
+      <p class="hero__subtitle">Type the 4-letter code your host shared.</p>
+    </section>
+
+    <section class="card stack">
+      <label for="join-code">Game code</label>
       <input
+        id="join-code"
         v-model="code"
         @keyup.enter="join"
-        placeholder="e.g. id5x"
+        placeholder="abcd"
         maxlength="8"
         autocapitalize="off"
         autocomplete="off"
         spellcheck="false"
-        style="font-size: 1.4rem; letter-spacing: .2em; text-align: center; text-transform: lowercase;"
+        class="code-input"
       />
-      <button class="btn-primary" :disabled="!code || loading" @click="join">
-        {{ loading ? 'Looking up…' : 'Continue' }}
+      <button class="btn-primary btn-lg btn-block" :disabled="!code || loading" @click="join">
+        {{ loading ? 'Looking up…' : 'Continue →' }}
       </button>
       <div v-if="err" class="error">{{ err }}</div>
-    </div>
+    </section>
 
-    <RouterLink to="/admin" class="card row between" style="text-decoration: none; color: inherit;">
-      <span>
-        <strong>Admin</strong>
-        <div class="muted" style="font-size: .85rem;">Create &amp; control games</div>
-      </span>
-      <span aria-hidden="true">→</span>
-    </RouterLink>
+    <div class="row" style="justify-content: center; gap: 18px;">
+      <span class="muted" style="font-size: .85rem;">Hosting?</span>
+      <RouterLink to="/admin" class="btn-link">Open admin →</RouterLink>
+    </div>
   </main>
 </template>
 

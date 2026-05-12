@@ -2,12 +2,16 @@
   <div class="stack">
     <div class="photo-frame">
       <img v-if="modelValue" :src="modelValue" alt="" />
-      <span v-else class="muted">No photo yet</span>
+      <span v-else class="photo-frame__placeholder">no photo yet</span>
     </div>
     <div class="row">
-      <button @click="pick('environment')">📷 Camera</button>
-      <button @click="pick()">🖼️ Library</button>
-      <button v-if="modelValue" class="btn-danger" @click="emit('update:modelValue', '')">Clear</button>
+      <button class="btn-warn flex-1" @click="pick('environment')">
+        <span aria-hidden="true">📷</span> Camera
+      </button>
+      <button class="btn-ghost flex-1" @click="pick()">
+        <span aria-hidden="true">🖼</span> Library
+      </button>
+      <button v-if="modelValue" class="btn-danger btn-icon" @click="emit('update:modelValue', '')" aria-label="Clear photo">✕</button>
     </div>
     <input ref="fileEl" type="file" accept="image/*" :capture="capture" @change="onFile" hidden />
     <div v-if="busy" class="helper">Processing image…</div>
@@ -20,7 +24,7 @@ import { ref } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  maxSize: { type: Number, default: 1024 }, // longest side in px
+  maxSize: { type: Number, default: 1024 },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -31,7 +35,6 @@ const err = ref('')
 
 function pick(cap) {
   capture.value = cap || null
-  // wait one tick so attribute applies
   setTimeout(() => fileEl.value && fileEl.value.click(), 0)
 }
 

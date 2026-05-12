@@ -1,14 +1,31 @@
 <template>
-  <main class="stack" style="padding-top: 32px;">
+  <main class="stack-lg" style="padding-top: 16px;">
+    <section class="hero" style="background: var(--blue-2);">
+      <span class="hero__sparkle s1" aria-hidden="true">✦</span>
+      <span class="hero__sparkle s2" aria-hidden="true">✦</span>
+
+      <span class="hero__eyebrow">Host mode</span>
+      <h1 class="hero__title">Run the <em>show</em>.</h1>
+      <p class="hero__subtitle">Sign in to create rooms and conduct the game.</p>
+    </section>
+
     <div class="card stack">
-      <h1>Admin</h1>
-      <p class="muted">Enter the host password.</p>
-      <input v-model="pwd" type="password" placeholder="••••••••" @keyup.enter="login" autocomplete="current-password" />
-      <button class="btn-primary" :disabled="!pwd || loading" @click="login">
-        {{ loading ? 'Signing in…' : 'Sign in' }}
+      <label for="admin-pwd">Host password</label>
+      <input
+        id="admin-pwd"
+        v-model="pwd"
+        type="password"
+        placeholder="••••••••"
+        @keyup.enter="login"
+        autocomplete="current-password"
+      />
+      <button class="btn-blue btn-lg btn-block" :disabled="!pwd || loading" @click="login">
+        {{ loading ? 'Signing in…' : 'Sign in →' }}
       </button>
       <div v-if="err" class="error">{{ err }}</div>
     </div>
+
+    <RouterLink to="/" class="btn-ghost btn-block">← Back to player join</RouterLink>
   </main>
 </template>
 

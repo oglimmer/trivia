@@ -1,47 +1,56 @@
 <template>
-  <main class="stack">
+  <main class="stack-lg">
     <div class="card stack">
-      <div class="row between">
+      <div class="row between" style="align-items: flex-start;">
         <div>
-          <h1 style="margin: 0;">{{ code }}</h1>
-          <div class="muted">{{ game?.name || '(no name)' }}</div>
+          <div class="muted bold" style="font-size: .78rem; letter-spacing: .14em; text-transform: uppercase;">Room code</div>
+          <h1 class="mono" style="margin: 4px 0 6px; letter-spacing: .12em; text-transform: lowercase;">{{ code }}</h1>
+          <div class="muted">{{ game?.name || '(untitled)' }}</div>
         </div>
-        <span class="tag">{{ game?.state || '…' }}</span>
+        <span :class="['state-pill', `state-${game?.state || 'setup'}`]">{{ game?.state || '…' }}</span>
       </div>
-      <div class="row" style="flex-wrap: wrap; gap: 8px;">
-        <button v-if="game?.state === 'setup'" class="btn-primary" @click="startGame">▶ Start game</button>
+
+      <div class="row wrap" style="gap: 10px;">
+        <button v-if="game?.state === 'setup'" class="btn-primary btn-lg" @click="startGame">▶ Start game</button>
         <button v-if="game?.state === 'game'" class="btn-danger" @click="endGame">⏹ End game</button>
-        <RouterLink to="/admin/games" class="muted" style="margin-left: auto;">← All games</RouterLink>
+        <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
       <div v-if="err" class="error">{{ err }}</div>
     </div>
 
-    <!-- SETUP MODE: show submitted questions -->
+    <!-- SETUP MODE -->
     <template v-if="game?.state === 'setup'">
-      <div class="card">
-        <div class="row between" style="margin-bottom: 8px;">
-          <h2>Submitted questions</h2>
-          <span class="tag">{{ questions.length }}</span>
+      <div class="card card--cream">
+        <div class="row between" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Submissions</h2>
+          <span class="tag tag--yellow">{{ questions.length }}</span>
         </div>
         <div class="stack">
-          <div v-for="q in questions" :key="q.id" class="card" style="background: var(--surface-2);">
+          <div v-for="q in questions" :key="q.id" class="card card--flat" style="background: var(--paper); border: 2px solid var(--ink); padding: 14px;">
             <div class="row" style="gap: 12px;">
               <img class="avatar" :src="q.photoB64" alt="" />
               <div style="flex: 1; min-width: 0;">
-                <div style="font-weight: 600;">{{ q.text }}</div>
+                <div class="bold">{{ q.text }}</div>
                 <div class="muted" style="font-size: .85rem;">
-                  <code>{{ q.answerType }}</code> · by {{ userName(q.userId) }}
+                  <span class="kbd" style="padding: 1px 6px; font-size: .75rem;">{{ q.answerType }}</span>
+                  · by {{ userName(q.userId) }}
                 </div>
               </div>
             </div>
-            <details style="margin-top: 8px;">
-              <summary class="muted">Show answer</summary>
-              <div v-if="q.answerType === 'choice'">
-                <div v-for="(o, i) in q.options" :key="i" :class="['option-btn', i === Number(q.correct) && 'correct']" style="margin-top: 6px;">
-                  {{ o }}
+            <details style="margin-top: 10px;">
+              <summary class="bold" style="cursor: pointer;">Reveal answer</summary>
+              <div v-if="q.answerType === 'choice'" class="stack" style="margin-top: 8px;">
+                <div
+                  v-for="(o, i) in q.options"
+                  :key="i"
+                  :class="['option-btn', i === Number(q.correct) && 'correct']"
+                >
+                  <span class="option-btn__bullet">{{ letters[i] }}</span>{{ o }}
                 </div>
               </div>
-              <div v-else>{{ q.correct }}</div>
+              <div v-else class="card card--mint" style="padding: 12px; margin-top: 8px; text-align: center;">
+                <span class="bold" style="font-family: var(--font-display); font-style: italic; font-size: 1.4rem;">{{ q.correct }}</span>
+              </div>
             </details>
           </div>
           <div v-if="questions.length === 0" class="muted center">No submissions yet.</div>
@@ -49,56 +58,71 @@
       </div>
 
       <div class="card">
-        <div class="row between" style="margin-bottom: 8px;">
-          <h2>Players</h2>
-          <span class="tag">{{ users.length }}</span>
+        <div class="row between" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Players</h2>
+          <span class="tag tag--blue">{{ users.length }}</span>
         </div>
         <ul class="ladder">
           <li v-for="u in users" :key="u.id">
             <img class="avatar" :src="u.photoB64" :alt="u.name" />
-            <span>{{ u.name }}</span>
-            <span class="pts">{{ hasQuestion(u.id) ? '✓' : '…' }}</span>
+            <span class="bold">{{ u.name }}</span>
+            <span class="pts" :style="`color: ${hasQuestion(u.id) ? 'var(--mint)' : 'var(--muted)'};`">
+              {{ hasQuestion(u.id) ? '✓ ready' : 'thinking…' }}
+            </span>
           </li>
+          <li v-if="!users.length" class="muted center" style="justify-content: center;">No players yet.</li>
         </ul>
       </div>
     </template>
 
-    <!-- GAME MODE: control panel -->
+    <!-- GAME MODE -->
     <template v-if="game?.state === 'game'">
       <div class="card stack">
         <div class="row between">
-          <h2>Current question</h2>
-          <span class="timer" v-if="game?.questionState === 'active'">{{ elapsed }}s</span>
+          <h2 style="margin: 0;">Now playing</h2>
+          <span class="timer tag tag--pink" v-if="game?.questionState === 'active'">{{ elapsed }}s</span>
+          <span class="tag tag--mint" v-else-if="game?.questionState === 'revealed'">Revealed</span>
         </div>
+
         <div v-if="currentQ" class="stack">
           <div class="photo-frame">
             <img :src="currentQ.photoB64" alt="" />
+            <div class="q-author">by {{ userName(currentQ.userId) }}</div>
           </div>
-          <div><strong>{{ currentQ.text }}</strong></div>
-          <div class="muted">by {{ userName(currentQ.userId) }}</div>
-          <div v-if="currentQ.answerType === 'choice'" class="stack">
-            <div v-for="(o, i) in currentQ.options" :key="i" :class="['option-btn', i === Number(currentQ.correct) && 'correct']">{{ o }}</div>
-          </div>
-          <div v-else><span class="muted">Correct:</span> {{ currentQ.correct }}</div>
-        </div>
-        <div v-else class="muted">No active question.</div>
+          <div class="q-card__text">{{ currentQ.text }}</div>
 
-        <div class="row" style="flex-wrap: wrap;">
-          <button class="btn-primary" v-if="!currentQ" @click="activateNext">▶ Start first question</button>
-          <button class="btn-accent" v-if="game?.questionState === 'active'" @click="reveal">Reveal answer</button>
-          <button v-if="game?.questionState === 'revealed'" class="btn-primary" @click="next">Next →</button>
+          <div v-if="currentQ.answerType === 'choice'" class="stack">
+            <div
+              v-for="(o, i) in currentQ.options"
+              :key="i"
+              :class="['option-btn', i === Number(currentQ.correct) && 'correct']"
+            >
+              <span class="option-btn__bullet">{{ letters[i] }}</span>{{ o }}
+            </div>
+          </div>
+          <div v-else class="card card--mint center" style="padding: 14px;">
+            <span class="muted bold" style="font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;">Correct</span>
+            <div style="font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: 1.6rem; margin-top: 4px;">{{ currentQ.correct }}</div>
+          </div>
+        </div>
+        <div v-else class="muted center">No active question.</div>
+
+        <div class="row wrap">
+          <button class="btn-primary btn-lg" v-if="!currentQ" @click="activateNext">▶ Start first question</button>
+          <button class="btn-warn btn-lg" v-if="game?.questionState === 'active'" @click="reveal">Reveal answer</button>
+          <button class="btn-primary btn-lg" v-if="game?.questionState === 'revealed'" @click="next">Next question →</button>
         </div>
       </div>
 
-      <div v-if="game?.questionState !== 'idle' && playerAnswered.size" class="card">
-        <div class="row between" style="margin-bottom: 8px;">
-          <h2>Live answers</h2>
-          <span class="tag">{{ playerAnswered.size }}/{{ users.length }}</span>
+      <div v-if="game?.questionState !== 'idle' && playerAnswered.size" class="card card--cream">
+        <div class="row between" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Live answers</h2>
+          <span class="tag tag--mint">{{ playerAnswered.size }} / {{ users.length }}</span>
         </div>
-        <div class="row" style="flex-wrap: wrap; gap: 8px;">
-          <div v-for="u in answeredUsers" :key="u.id" class="row" style="gap: 6px;">
-            <img class="avatar" :src="u.photoB64" :alt="u.name" />
-            <span>{{ u.name }}</span>
+        <div class="row wrap" style="gap: 10px;">
+          <div v-for="u in answeredUsers" :key="u.id" class="who" style="box-shadow: 2px 2px 0 var(--ink);">
+            <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+            <div class="who__meta"><span class="who__name">{{ u.name }}</span></div>
           </div>
         </div>
       </div>
@@ -109,22 +133,23 @@
           <li v-for="(s, i) in leaderboard" :key="s.userId">
             <span class="rank">{{ i + 1 }}</span>
             <img class="avatar" :src="s.photoB64" :alt="s.userName" />
-            <span>{{ s.userName }}</span>
-            <span class="pts">{{ s.points }} pts</span>
+            <span class="bold">{{ s.userName }}</span>
+            <span class="pts">{{ s.points }}</span>
           </li>
+          <li v-if="!leaderboard.length" class="muted center" style="justify-content: center;">Scores will appear here.</li>
         </ol>
       </div>
     </template>
 
     <template v-if="game?.state === 'finished'">
-      <div class="card">
+      <div class="card stack">
         <h2>Final standings</h2>
         <ol class="ladder">
           <li v-for="(s, i) in leaderboard" :key="s.userId">
             <span class="rank">{{ i + 1 }}</span>
             <img class="avatar" :src="s.photoB64" :alt="s.userName" />
-            <span>{{ s.userName }}</span>
-            <span class="pts">{{ s.points }} pts</span>
+            <span class="bold">{{ s.userName }}</span>
+            <span class="pts">{{ s.points }}</span>
           </li>
         </ol>
       </div>
@@ -154,6 +179,7 @@ const err = ref('')
 const elapsed = ref(0)
 let tick = null
 let stopListening = null
+const letters = ['A', 'B', 'C', 'D']
 
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
 
@@ -191,7 +217,7 @@ function applyState(d) {
   else if (d.questionState === 'idle') currentQ.value = null
   if (d.leaderboard) leaderboard.value = d.leaderboard
   if (d.questionState === 'active') {
-    playerAnswered.value = new Set() // reset for new round
+    playerAnswered.value = new Set()
   }
 }
 
@@ -221,11 +247,7 @@ onUnmounted(() => {
   disconnect()
 })
 
-watch(() => game.value && game.value.state, (s) => {
-  if (s === 'finished') {
-    // remain on page; leaderboard shown
-  }
-})
+watch(() => game.value && game.value.state, () => { /* stay on page */ })
 
 async function startGame() {
   err.value = ''
@@ -257,9 +279,26 @@ async function reveal() {
 async function next() {
   try {
     const r = await api.adminNext(props.code)
-    if (r && r.done) {
-      // game is now finished, state arrives via ws
-    }
+    if (r && r.done) { /* state arrives via ws */ }
   } catch (e) { err.value = e.message }
 }
 </script>
+
+<style scoped>
+.state-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: .75rem;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.state-pill.state-setup    { background: var(--blue-2); }
+.state-pill.state-game     { background: var(--pink); color: var(--paper); }
+.state-pill.state-finished { background: var(--mint-2); }
+</style>

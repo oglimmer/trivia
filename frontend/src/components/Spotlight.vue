@@ -1,31 +1,42 @@
 <template>
-  <div class="card stack center" :class="['spot', color, big && 'big']" v-if="score">
-    <div class="halo" aria-hidden="true"></div>
+  <div :class="['spot', color, big && 'big']" v-if="score">
+    <div class="spot__rays" aria-hidden="true"></div>
+    <div v-if="big" class="confetti" aria-hidden="true">
+      <i v-for="n in 18" :key="n" :style="confettiStyle(n)"></i>
+    </div>
+
+    <span class="spot__rank">{{ rankLabel }}</span>
     <img class="avatar avatar-lg" :src="score.photoB64" :alt="score.userName" />
-    <div style="font-size: 1.6rem; font-weight: 700;">{{ score.userName }}</div>
-    <div class="muted">{{ score.points }} points</div>
+    <div class="spot__name">{{ score.userName }}</div>
+    <div class="spot__pts">{{ score.points }} pts</div>
   </div>
   <div v-else class="muted center">—</div>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   score: { type: Object, default: null },
   rank: { type: [String, Number], required: true },
   color: { type: String, default: 'gold' },
   big: { type: Boolean, default: false },
 })
-</script>
 
-<style scoped>
-.spot { position: relative; overflow: hidden; }
-.halo {
-  position: absolute; inset: -20%; pointer-events: none;
-  background: radial-gradient(circle at 50% 30%, var(--c, gold) 0%, transparent 55%);
-  opacity: .25;
+const rankLabel = computed(() => {
+  const map = { '1': '🥇 First', '2': '🥈 Second', '3': '🥉 Third' }
+  return map[String(props.rank)] || `#${props.rank}`
+})
+
+function confettiStyle(n) {
+  const left = (n * 17) % 100
+  const delay = (n * 0.13) % 2
+  const dur = 2.2 + (n % 5) * 0.3
+  return {
+    left: `${left}%`,
+    animationDelay: `${delay}s`,
+    animationDuration: `${dur}s`,
+    transform: `rotate(${n * 28}deg)`,
+  }
 }
-.spot.gold   { --c: #ffd166; }
-.spot.silver { --c: #d8dee9; }
-.spot.bronze { --c: #cd7f32; }
-.spot.big .avatar-lg { width: 128px; height: 128px; }
-</style>
+</script>

@@ -1,56 +1,68 @@
 <template>
-  <main class="stack">
+  <main class="stack-lg">
     <transition name="fade" mode="out-in">
-      <div v-if="saved && !editing" key="waiting" class="card stack center">
-        <h1>🎉 You're in!</h1>
-        <p>Your question is locked in. Sit tight — the host will start the game soon.</p>
+      <div v-if="saved && !editing" key="waiting" class="card card--mint stack center card-stickered">
+        <div style="font-size: 3rem; line-height: 1;">🎉</div>
+        <h1>Locked in!</h1>
+        <p>Your question is ready. Sit tight — the host kicks things off in a moment.</p>
         <button class="btn-ghost" @click="editing = true">← Edit my question</button>
       </div>
 
       <div v-else key="editing" class="card stack">
-        <h1>Add your question</h1>
-        <p class="muted">Upload a photo, write a question, and define the answers. Everyone gets one.</p>
+        <div class="row between">
+          <h1 style="margin: 0;">Your question</h1>
+          <span class="tag tag--yellow">1 each</span>
+        </div>
+        <p class="muted" style="margin-top: -4px;">Snap a photo, write a question, set the right answer.</p>
 
         <label>Photo</label>
         <PhotoPicker v-model="photo" />
 
         <label>Question</label>
-        <textarea v-model="text" placeholder="What is this?" maxlength="160" rows="3"></textarea>
+        <textarea v-model="text" placeholder="What is this thing?" maxlength="160" rows="3"></textarea>
 
         <label>Answer type</label>
-        <select v-model="answerType">
-          <option value="yesno">Yes / No</option>
-          <option value="choice">Multiple choice (2-4)</option>
-          <option value="number">Guess a number</option>
-        </select>
+        <div class="toggles">
+          <button :class="{ active: answerType === 'yesno' }" @click="answerType = 'yesno'">Yes / No</button>
+          <button :class="{ active: answerType === 'choice' }" @click="answerType = 'choice'">Multiple</button>
+          <button :class="{ active: answerType === 'number' }" @click="answerType = 'number'">Number</button>
+        </div>
 
         <template v-if="answerType === 'yesno'">
           <label>Correct answer</label>
           <div class="grid-2">
-            <button :class="['option-btn', correct === 'yes' && 'chosen']" @click="correct = 'yes'">Yes</button>
-            <button :class="['option-btn', correct === 'no'  && 'chosen']" @click="correct = 'no'">No</button>
+            <button :class="['option-btn', correct === 'yes' && 'chosen']" @click="correct = 'yes'">
+              <span class="option-btn__bullet">Y</span>Yes
+            </button>
+            <button :class="['option-btn', correct === 'no' && 'chosen']" @click="correct = 'no'">
+              <span class="option-btn__bullet">N</span>No
+            </button>
           </div>
         </template>
 
         <template v-if="answerType === 'choice'">
-          <label>Options (2-4) — tap the one that's correct</label>
+          <label>Options · tap ★ to mark the right one</label>
           <div class="stack">
-            <div v-for="(_, i) in options" :key="i" class="row">
+            <div v-for="(_, i) in options" :key="i" class="row" style="align-items: stretch;">
               <input
                 v-model="options[i]"
-                :placeholder="`Option ${i+1}`"
+                :placeholder="`Option ${i + 1}`"
                 maxlength="60"
-                :class="{ 'chosen': correctIdx === i }"
               />
               <button
-                :class="['option-btn', correctIdx === i && 'correct']"
-                style="width: auto; padding: 8px 12px;"
+                :class="['btn-icon', correctIdx === i ? 'btn-warn' : 'btn-ghost']"
                 @click="correctIdx = i"
-                :aria-label="`Mark option ${i+1} as correct`"
-              >✓</button>
-              <button v-if="options.length > 2" class="btn-danger" style="padding: 8px 12px;" @click="removeOption(i)">✕</button>
+                :aria-label="`Mark option ${i + 1} as correct`"
+                :title="correctIdx === i ? 'Correct answer' : 'Mark as correct'"
+              >★</button>
+              <button
+                v-if="options.length > 2"
+                class="btn-icon btn-danger"
+                @click="removeOption(i)"
+                aria-label="Remove option"
+              >✕</button>
             </div>
-            <button v-if="options.length < 4" @click="options.push('')">+ Add option</button>
+            <button v-if="options.length < 4" class="btn-ghost btn-block" @click="options.push('')">+ Add option</button>
           </div>
         </template>
 
@@ -60,20 +72,21 @@
         </template>
 
         <div v-if="!aiConfirm" class="row">
-          <button @click="requestAI" :disabled="!photo || aiBusy">
-            {{ aiBusy ? '✨ Thinking…' : '✨ Help me with AI' }}
+          <button class="btn-blue btn-block" @click="requestAI" :disabled="!photo || aiBusy">
+            <span aria-hidden="true">✨</span>
+            {{ aiBusy ? 'Thinking…' : 'Help me with AI' }}
           </button>
         </div>
-        <div v-else class="card stack" style="background: var(--surface-2); padding: 12px;">
+        <div v-else class="card card--blue stack" style="padding: 14px;">
           <p style="margin: 0;">AI will replace your current question{{ extraFieldsLabel }}. Continue?</p>
           <div class="row">
-            <button class="btn-primary" style="flex: 1;" @click="confirmAI">Replace</button>
-            <button class="btn-ghost" @click="aiConfirm = false">Keep mine</button>
+            <button class="btn-primary flex-1" @click="confirmAI">Replace</button>
+            <button class="btn-ghost flex-1" @click="aiConfirm = false">Keep mine</button>
           </div>
         </div>
 
         <div class="row">
-          <button class="btn-primary" style="flex: 1;" :disabled="!canSubmit || loading" @click="save">
+          <button class="btn-primary btn-lg flex-1" :disabled="!canSubmit || loading" @click="save">
             {{ loading ? 'Saving…' : (saved ? 'Update question' : 'Save question') }}
           </button>
           <button v-if="saved" class="btn-ghost" @click="editing = false">Cancel</button>
@@ -84,24 +97,25 @@
 
     <transition name="fade">
       <div v-if="aiBusy" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ai-busy-title">
-        <div class="modal card stack center">
+        <div class="modal stack center">
           <div class="spinner" aria-hidden="true"></div>
-          <h2 id="ai-busy-title" style="margin: 0;">✨ Working on it…</h2>
-          <p class="muted" style="margin: 0;">AI is crafting your question. This usually takes a few seconds.</p>
+          <h2 id="ai-busy-title" style="margin: 0;">Cooking up a question…</h2>
+          <p class="muted" style="margin: 0;">Usually takes a few seconds.</p>
         </div>
       </div>
     </transition>
 
-    <div class="card">
-      <div class="row between" style="margin-bottom: 8px;">
-        <h2>Players</h2>
-        <span class="tag">{{ users.length }}</span>
+    <div class="card card--cream">
+      <div class="row between" style="margin-bottom: 12px;">
+        <h2 style="margin: 0;">Players in the room</h2>
+        <span class="tag tag--blue">{{ users.length }}</span>
       </div>
-      <div class="row" style="flex-wrap: wrap; gap: 10px;">
-        <div v-for="u in users" :key="u.id" class="row" style="gap: 6px;">
-          <img class="avatar" :src="u.photoB64 || ''" :alt="u.name" />
-          <span>{{ u.name }}</span>
+      <div class="row wrap" style="gap: 10px;">
+        <div v-for="u in users" :key="u.id" class="who" style="box-shadow: 2px 2px 0 var(--ink);">
+          <img class="avatar avatar-sm" :src="u.photoB64 || ''" :alt="u.name" />
+          <div class="who__meta"><span class="who__name">{{ u.name }}</span></div>
         </div>
+        <span v-if="!users.length" class="muted">No one yet — be the first!</span>
       </div>
     </div>
   </main>
@@ -122,7 +136,7 @@ const photo = ref('')
 const text = ref('')
 const answerType = ref('yesno')
 const correct = ref('yes')           // yesno
-const options = ref(['', ''])         // choice
+const options = ref(['', ''])        // choice
 const correctIdx = ref(0)
 const correctNumber = ref(0)
 const loading = ref(false)
@@ -167,11 +181,9 @@ onMounted(async () => {
     const list = await api.listUsers(props.code)
     store.users = list
   } catch {}
-  // If state changed (admin started the game) before we mount, jump:
   if (store.game && store.game.state === 'game') router.replace(`/g/${props.code}/play`)
   if (store.game && store.game.state === 'finished') router.replace(`/g/${props.code}/results`)
 
-  // Preload my existing question if any:
   try {
     const qs = await api.listQuestions(props.code)
     const mine = qs.find(q => q.userId === store.me.id)
