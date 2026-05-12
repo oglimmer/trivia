@@ -19,10 +19,13 @@
 
         <div class="photo-frame">
           <img :src="q.photoB64" alt="question photo" />
-          <div v-if="authorName" class="q-author">
-            <img v-if="authorPhoto" class="avatar avatar-sm" :src="authorPhoto" alt="" />
-            <span>by {{ authorName }}</span>
-          </div>
+          <img
+            v-if="authorPhoto"
+            class="q-author-avatar"
+            :src="authorPhoto"
+            :alt="authorName ? `by ${authorName}` : ''"
+            :title="authorName ? `by ${authorName}` : ''"
+          />
         </div>
 
         <h2 class="q-card__text">{{ q.text }}</h2>
