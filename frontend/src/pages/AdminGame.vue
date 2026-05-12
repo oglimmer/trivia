@@ -236,8 +236,8 @@ onMounted(async () => {
 
   stopListening = onMessage((m) => {
     if (m.type === 'gameState') applyState(m.data)
-    else if (m.type === 'users') users.value = m.data
-    else if (m.type === 'questionsAdmin') questions.value = m.data
+    else if (m.type === 'users') users.value = m.data || []
+    else if (m.type === 'questionsAdmin') questions.value = m.data || []
     else if (m.type === 'playerAnswered') playerAnswered.value.add(m.data.userId)
     else if (m.type === 'presence') online.value = new Set(m.data.online || [])
   })

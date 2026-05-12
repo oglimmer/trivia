@@ -200,7 +200,7 @@ func (d *DB) ListUsers(ctx context.Context, gameID string) ([]User, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []User
+	out := []User{}
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(&u.ID, &u.GameID, &u.Name, &u.PhotoB64, &u.Token, &u.CreatedAt); err != nil {
@@ -238,7 +238,7 @@ func (d *DB) ListQuestions(ctx context.Context, gameID string, includeCorrect bo
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Question
+	out := []Question{}
 	for rows.Next() {
 		var q Question
 		if err := rows.Scan(&q.ID, &q.GameID, &q.UserID, &q.Text, &q.PhotoB64,

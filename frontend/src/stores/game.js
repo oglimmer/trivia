@@ -81,7 +81,7 @@ export const useGameStore = defineStore('game', {
           break
         }
         case 'users':
-          this.users = m.data
+          this.users = m.data || []
           break
         case 'answerAck':
           this.lastAnswerAck = m.data
