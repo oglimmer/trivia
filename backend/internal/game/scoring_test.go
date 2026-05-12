@@ -54,21 +54,82 @@ func TestTimeBonusDecays(t *testing.T) {
 	}
 }
 
-func TestNumberExactAndPartial(t *testing.T) {
+func TestJudgeNumberDefersScoring(t *testing.T) {
+	// Number answers are scored later via ScoreNumberAnswers; JudgeAnswer
+	// returns a 0/false placeholder regardless of correctness or speed.
 	ok, pts := JudgeAnswer("number", 0, raw(t, 100.0), raw(t, 100.0), 0)
-	if !ok || pts <= 300 {
-		t.Fatalf("expected correct with bonus, got ok=%v pts=%d", ok, pts)
+	if ok || pts != 0 {
+		t.Fatalf("expected deferred (false, 0), got ok=%v pts=%d", ok, pts)
 	}
-	ok2, pts2 := JudgeAnswer("number", 0, raw(t, 100.0), raw(t, 110.0), 0)
-	if ok2 {
-		t.Fatalf("expected not exact")
+}
+
+func TestScoreNumberExactGetsTimeBonus(t *testing.T) {
+	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
+		{UserID: "a", Answer: raw(t, 100.0), ResponseMs: 0},
+	})
+	if len(scores) != 1 {
+		t.Fatalf("want 1 score, got %d", len(scores))
 	}
-	if pts2 == 0 {
-		t.Fatalf("expected partial credit for close guess")
+	if !scores[0].IsCorrect {
+		t.Fatalf("expected exact match to be correct")
 	}
-	_, miss := JudgeAnswer("number", 0, raw(t, 100.0), raw(t, 1000.0), 0)
-	if miss != 0 {
-		t.Fatalf("expected 0 for far guess, got %d", miss)
+	if scores[0].Points <= 300 {
+		t.Fatalf("expected base + time bonus > 300, got %d", scores[0].Points)
+	}
+}
+
+func TestScoreNumberTopThreeOnly(t *testing.T) {
+	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
+		{UserID: "a", Answer: raw(t, 103.0), ResponseMs: 5000},
+		{UserID: "b", Answer: raw(t, 107.0), ResponseMs: 5000},
+		{UserID: "c", Answer: raw(t, 112.0), ResponseMs: 5000},
+		{UserID: "d", Answer: raw(t, 120.0), ResponseMs: 5000},
+	})
+	byUser := map[string]NumberScore{}
+	for _, s := range scores {
+		byUser[s.UserID] = s
+	}
+	if byUser["a"].Points <= byUser["b"].Points {
+		t.Fatalf("closer guess should score higher: a=%d b=%d", byUser["a"].Points, byUser["b"].Points)
+	}
+	if byUser["b"].Points <= byUser["c"].Points {
+		t.Fatalf("closer guess should score higher: b=%d c=%d", byUser["b"].Points, byUser["c"].Points)
+	}
+	if byUser["c"].Points == 0 {
+		t.Fatalf("3rd place should score, got 0")
+	}
+	if byUser["d"].Points != 0 {
+		t.Fatalf("4th place should not score, got %d", byUser["d"].Points)
+	}
+	for _, s := range scores {
+		if s.IsCorrect {
+			t.Fatalf("no exact matches: %+v should not be correct", s)
+		}
+	}
+}
+
+func TestScoreNumberNoTimeBonusForNonExact(t *testing.T) {
+	// Same guess, different response times — non-exact guesses get no time
+	// bonus, so points should match.
+	fast := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
+		{UserID: "a", Answer: raw(t, 110.0), ResponseMs: 0},
+	})
+	slow := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
+		{UserID: "a", Answer: raw(t, 110.0), ResponseMs: 29_000},
+	})
+	if fast[0].Points != slow[0].Points {
+		t.Fatalf("non-exact guesses must not get a time bonus: fast=%d slow=%d", fast[0].Points, slow[0].Points)
+	}
+}
+
+func TestScoreNumberWildGuessGetsZero(t *testing.T) {
+	// A lone guess that's wildly off should not earn points even though it's
+	// technically the top-1 — closeness collapses to 0.
+	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
+		{UserID: "a", Answer: raw(t, 100000.0), ResponseMs: 0},
+	})
+	if scores[0].Points != 0 {
+		t.Fatalf("wild guess should get 0, got %d", scores[0].Points)
 	}
 }
 

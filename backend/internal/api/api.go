@@ -313,12 +313,48 @@ func (s *Server) revealQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "no active question")
 		return
 	}
+	if g.CurrentQuestionID != nil {
+		if err := s.rescoreNumberAnswers(r.Context(), *g.CurrentQuestionID); err != nil {
+			log.Printf("rescore number answers: %v", err)
+		}
+	}
 	if err := s.DB.CloseQuestion(r.Context(), g.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
+}
+
+// rescoreNumberAnswers ranks all submitted answers to a number question by
+// closeness and writes the resulting points back to the answers table. This is
+// a no-op for non-number questions.
+func (s *Server) rescoreNumberAnswers(ctx context.Context, questionID string) error {
+	q, err := s.DB.QuestionByID(ctx, questionID)
+	if err != nil {
+		return err
+	}
+	if q.AnswerType != "number" {
+		return nil
+	}
+	ans, err := s.DB.AnswersForQuestion(ctx, questionID)
+	if err != nil {
+		return err
+	}
+	if len(ans) == 0 {
+		return nil
+	}
+	inputs := make([]game.NumberAnswer, len(ans))
+	for i, a := range ans {
+		inputs[i] = game.NumberAnswer{UserID: a.UserID, Answer: a.Answer, ResponseMs: a.ResponseMs}
+	}
+	scores := game.ScoreNumberAnswers(q.Correct, inputs)
+	for _, sc := range scores {
+		if err := s.DB.UpdateAnswerScore(ctx, questionID, sc.UserID, sc.IsCorrect, sc.Points); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {

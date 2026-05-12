@@ -288,6 +288,14 @@ func (d *DB) SaveAnswer(ctx context.Context, questionID, userID string, answer j
 	return err
 }
 
+func (d *DB) UpdateAnswerScore(ctx context.Context, questionID, userID string, isCorrect bool, points int) error {
+	_, err := d.Pool.Exec(ctx, `
+		UPDATE answers SET is_correct=$3, points=$4
+		WHERE question_id=$1 AND user_id=$2
+	`, questionID, userID, isCorrect, points)
+	return err
+}
+
 func (d *DB) AnswersForQuestion(ctx context.Context, questionID string) ([]Answer, error) {
 	rows, err := d.Pool.Query(ctx, `
 		SELECT id, question_id, user_id, answer, response_ms, is_correct, points, created_at

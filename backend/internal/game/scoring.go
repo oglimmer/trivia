@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"math"
+	"sort"
 )
 
 // AnswerWindowMs is the time after which no time bonus is awarded.
@@ -52,9 +53,9 @@ func timeBonus(base, responseMs int) int {
 	return int(math.Round(float64(base) * 0.5 * frac))
 }
 
-// JudgeAnswer determines correctness and awards points.
-// `correct` and `answer` are raw JSON values matching the question's answer_type.
-// For number questions, partial credit is awarded based on proximity.
+// JudgeAnswer determines correctness and awards points for yes/no and choice
+// answers. Number answers are scored later via ScoreNumberAnswers (called at
+// reveal time) because their points depend on the whole field of guesses.
 func JudgeAnswer(answerType string, optionCount int, correct, answer json.RawMessage, responseMs int) (isCorrect bool, points int) {
 	base := basePoints(answerType, optionCount)
 	switch answerType {
@@ -82,30 +83,109 @@ func JudgeAnswer(answerType string, optionCount int, correct, answer json.RawMes
 		}
 		return false, 0
 	case "number":
-		var c, a float64
-		if err := json.Unmarshal(correct, &c); err != nil {
-			return false, 0
-		}
-		if err := json.Unmarshal(answer, &a); err != nil {
-			return false, 0
-		}
-		// Exact (within 0.5% or 1 absolute, whichever is larger) -> full credit + bonus.
-		// Otherwise scale by closeness: max 1x base, 0 below threshold.
-		tol := math.Max(math.Abs(c)*0.005, 1)
-		diff := math.Abs(c - a)
-		if diff <= tol {
-			return true, base + timeBonus(base, responseMs)
-		}
-		// Partial credit window: if within 25% of |c| (or 10 if c==0), award partial.
-		window := math.Max(math.Abs(c)*0.25, 10)
-		if diff < window {
-			frac := 1.0 - diff/window
-			p := int(math.Round(float64(base) * 0.6 * frac))
-			return false, p
-		}
+		// Deferred: ScoreNumberAnswers handles this at reveal time.
 		return false, 0
 	}
 	return false, 0
+}
+
+// NumberAnswer is one player's submission for a number question.
+type NumberAnswer struct {
+	UserID     string
+	Answer     json.RawMessage
+	ResponseMs int
+}
+
+// NumberScore is the awarded score for a single NumberAnswer after ranking.
+type NumberScore struct {
+	UserID    string
+	IsCorrect bool
+	Points    int
+}
+
+// numberExactTolerance returns the absolute tolerance for treating a guess as
+// exact. Mirrors the legacy single-answer rule (0.5% of |c| or 1, whichever larger).
+func numberExactTolerance(c float64) float64 {
+	return math.Max(math.Abs(c)*0.005, 1)
+}
+
+// ScoreNumberAnswers ranks number answers by distance to `correct` and awards
+// points to the three closest guesses. Points scale with closeness. A guess
+// within the exact tolerance gets the full base plus a time bonus; non-exact
+// top-3 guesses get partial credit and no time bonus.
+//
+// Rank weights of [1.0, 0.66, 0.33] are applied to non-exact top-3 finishers.
+// Closeness is `max(0, 1 - diff/scale)` where `scale = max(|c|*0.5, 10)`,
+// so very wild guesses earn little even if they happen to make the top 3.
+func ScoreNumberAnswers(correct json.RawMessage, answers []NumberAnswer) []NumberScore {
+	out := make([]NumberScore, len(answers))
+	for i, a := range answers {
+		out[i] = NumberScore{UserID: a.UserID}
+	}
+	if len(answers) == 0 {
+		return out
+	}
+	var c float64
+	if err := json.Unmarshal(correct, &c); err != nil {
+		return out
+	}
+
+	type ranked struct {
+		idx        int
+		diff       float64
+		valid      bool
+		exact      bool
+		responseMs int
+	}
+	tol := numberExactTolerance(c)
+	rs := make([]ranked, 0, len(answers))
+	for i, a := range answers {
+		var v float64
+		if err := json.Unmarshal(a.Answer, &v); err != nil {
+			continue
+		}
+		d := math.Abs(c - v)
+		rs = append(rs, ranked{
+			idx:        i,
+			diff:       d,
+			valid:      true,
+			exact:      d <= tol,
+			responseMs: a.ResponseMs,
+		})
+	}
+	sort.SliceStable(rs, func(i, j int) bool {
+		if rs[i].diff != rs[j].diff {
+			return rs[i].diff < rs[j].diff
+		}
+		return rs[i].responseMs < rs[j].responseMs
+	})
+
+	base := basePoints("number", 0)
+	rankWeights := [3]float64{1.0, 0.66, 0.33}
+	scale := math.Max(math.Abs(c)*0.5, 10)
+
+	for rank, r := range rs {
+		if r.exact {
+			out[r.idx] = NumberScore{
+				UserID:    answers[r.idx].UserID,
+				IsCorrect: true,
+				Points:    base + timeBonus(base, r.responseMs),
+			}
+			continue
+		}
+		if rank >= len(rankWeights) {
+			continue
+		}
+		closeness := math.Max(0, 1.0-r.diff/scale)
+		if closeness <= 0 {
+			continue
+		}
+		out[r.idx] = NumberScore{
+			UserID: answers[r.idx].UserID,
+			Points: int(math.Round(float64(base) * rankWeights[rank] * closeness)),
+		}
+	}
+	return out
 }
 
 func normYesNo(s string) string {
