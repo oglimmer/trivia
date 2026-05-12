@@ -8,6 +8,7 @@ let backoff = 500
 let retryTimer = null
 let heartbeatTimer = null
 let lastRecvAt = 0
+let paused = false
 
 // A backgrounded tab / sleeping device can leave the WebSocket in readyState=1
 // long after the underlying TCP connection died, so onclose never fires and
@@ -68,7 +69,7 @@ function connect() {
   ws.onclose = () => {
     stopHeartbeat()
     emit({ type: '_disconnected' })
-    if (url) {
+    if (url && !paused) {
       retryTimer = setTimeout(connect, backoff)
       backoff = Math.min(backoff * 2, 5000)
     }
@@ -113,13 +114,25 @@ export function disconnect() {
 
 function onWake() {
   if (!url) return
+  paused = false
   reconnectNow()
+}
+
+// Hide → close the socket so the server marks the player offline immediately
+// instead of waiting for the 75s read deadline. The close frame goes out
+// synchronously before the OS suspends the page on mobile.
+function onHide() {
+  if (!url) return
+  paused = true
+  teardownSocket()
 }
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) onWake()
+    if (document.hidden) onHide()
+    else onWake()
   })
+  window.addEventListener('pagehide', onHide)
   window.addEventListener('pageshow', (e) => {
     if (e.persisted) onWake()
   })

@@ -140,8 +140,11 @@ Inbound (from client):
 Outbound (from server):
 - `gameState` — the current view; admins additionally get `correct` and `questionsAdmin`.
 - `users` — list of joined players (no tokens).
+- `presence` — admin only; `{online: [userId, ...]}` of players with at least one live connection. Sent on every player join/leave.
 - `playerAnswered` — admin only; fires as each player submits.
 - `answerAck` — to the submitting player, with `responseMs`.
+
+Connection lifecycle: server pings every 30s with a 75s read deadline. The client also closes the socket on `visibilitychange→hidden` / `pagehide` so the player drops from the admin's presence list within a network RTT — without this, a backgrounded mobile tab would appear online for ~75s after the user left the app. On `visibilitychange→visible` / `pageshow` / `online`, the client reconnects.
 
 ## Gaps to plan & next steps
 
