@@ -1,0 +1,34 @@
+1. Public URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+   https://{{ $host.host }}/
+{{- end }}
+{{- else }}
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "trivia.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
+{{- end }}
+
+2. Seal the application secret BEFORE installing. The chart consumes:
+     POSTGRES_PASSWORD, JWT_SECRET, ADMIN_PASSWORD, ANTHROPIC_API_KEY (optional)
+
+   kubectl create secret generic {{ include "trivia.secretName" . }} \
+     --namespace {{ .Release.Namespace }} \
+     --dry-run=client -o yaml \
+     --from-literal=POSTGRES_PASSWORD=<db-password> \
+     --from-literal=JWT_SECRET=<32+chars> \
+     --from-literal=ADMIN_PASSWORD=<admin-password> \
+     --from-literal=ANTHROPIC_API_KEY=<sk-ant-...> \
+     | kubeseal --format yaml > helm/trivia/templates/sealed-secret.yaml
+
+3. TLS certificate is issued by cert-manager via the
+   `{{ index .Values.ingress.annotations "cert-manager.io/cluster-issuer" }}` cluster issuer.
+   Secret name: {{ (index .Values.ingress.tls 0).secretName }}
+
+4. If you pull images from a private GHCR namespace, create a docker-registry
+   secret and reference it in values.imagePullSecrets — see the comment at
+   the bottom of values.yaml.
+
+{{- if .Values.postgres.enabled }}
+
+5. Postgres data lives on PVC {{ include "trivia.postgres.fullname" . }}-data.
+   Snapshot it before destroying the release.
+{{- end }}

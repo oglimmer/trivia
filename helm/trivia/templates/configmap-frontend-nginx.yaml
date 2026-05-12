@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "trivia.frontend.fullname" . }}-nginx
+  labels:
+    {{- include "trivia.frontend.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        client_max_body_size 4m;
+
+        # SPA only — /api, /ws, and /health are handled by the ingress and
+        # routed directly to the backend service. The image ships an in-cluster
+        # proxy nginx.conf for docker-compose; this ConfigMap overrides it.
+        location / {
+            root /usr/share/nginx/html;
+            try_files $uri $uri/ /index.html;
+        }
+    }

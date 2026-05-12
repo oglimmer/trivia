@@ -1,0 +1,158 @@
+# Default values for trivia
+
+replicaCount: 1
+
+# Public URL (HTTPS — websockets are upgraded over the same origin via /ws).
+publicBaseURL: "https://trivia.oglimmer.com"
+
+# Anthropic / Claude API integration. The API key itself goes into the sealed
+# secret under the ANTHROPIC_API_KEY key; only the model id is set here.
+anthropic:
+  model: "claude-sonnet-4-6"
+
+# Backend (API + WebSocket) configuration
+backend:
+  name: api
+  image:
+    repository: registry.oglimmer.com/trivia-backend
+    pullPolicy: Always
+    tag: "latest"
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Frontend (nginx serving the SPA) configuration
+frontend:
+  name: web
+  image:
+    repository: registry.oglimmer.com/trivia-frontend
+    pullPolicy: Always
+    tag: "latest"
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Bundled Postgres (single-replica, PVC-backed). Set enabled=false to use an
+# external database — then provide host/user/db here and put the password in
+# the sealed secret under POSTGRES_PASSWORD.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  user: trivia
+  database: trivia
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# External Postgres (only consulted when postgres.enabled=false).
+# Password is read from the sealed secret's POSTGRES_PASSWORD key.
+externalPostgres:
+  host: ""
+  port: 5432
+  user: trivia
+  database: trivia
+
+# Ingress configuration. Cert-manager + ingress-nginx pattern, matching the
+# oglimmer.com DNS-01 cluster issuer. Path order matters — backend paths
+# (/api, /ws) MUST come BEFORE the frontend catch-all "/".
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    cert-manager.io/cluster-issuer: "oglimmer-com-dns"
+    # WebSockets: ingress-nginx upgrades automatically when the client sends
+    # Upgrade headers, but keep the long-lived stream alive and don't buffer.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # AI suggest can post moderately sized payloads; keep room.
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+  hosts:
+    - host: trivia.oglimmer.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: api
+        - path: /ws
+          pathType: Prefix
+          backend: api
+        - path: /health
+          pathType: Exact
+          backend: api
+        - path: /
+          pathType: Prefix
+          backend: web
+  tls:
+    - secretName: tls-trivia-ingress-dns
+      hosts:
+        - trivia.oglimmer.com
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod-level security context.
+podSecurityContext: {}
+
+# Backend container security context. The Go binary runs as a non-root user.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# Frontend (nginx) security context.
+frontendSecurityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Image pull secrets. Cluster-wide pull secret for registry.oglimmer.com,
+# pre-created in the namespace (matches the dsa convention).
+imagePullSecrets:
+  - name: oglimmerregistrykey

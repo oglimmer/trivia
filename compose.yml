@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trivia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trivia}
+      POSTGRES_DB: ${POSTGRES_DB:-trivia}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trivia}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trivia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trivia}
+      POSTGRES_DB: ${POSTGRES_DB:-trivia}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-letmein}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-please-32-bytes}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE: /api
+      VITE_WS_BASE: /ws
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  db-data:
