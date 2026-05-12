@@ -54,7 +54,7 @@ Return a strict JSON object with these fields and nothing else (no prose, no cod
 
 Rules by answerType:
 - yesno    : options=["Yes","No"]; correct="yes" or "no".
-- choice   : options=2-4 short answers; correct=integer index (0-based) of the right option.
+- choice   : options=exactly 4 short answers; correct=integer index (0-based) of the right option.
 - number   : options=[]; correct is the numeric answer (no units in the number itself).
 
 What makes a GOOD trivia question here:

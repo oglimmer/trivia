@@ -247,17 +247,14 @@ async function confirmAI() {
   try {
     const r = await api.aiSuggest({
       hint: text.value || '',
-      answerType: answerType.value,
+      answerType: 'choice',
       photoB64: photo.value,
     })
+    answerType.value = 'choice'
     text.value = r.text || text.value
-    if (answerType.value === 'choice' && Array.isArray(r.options) && r.options.length >= 2) {
+    if (Array.isArray(r.options) && r.options.length >= 2) {
       options.value = r.options.slice(0, 4)
       correctIdx.value = Number(r.correct) || 0
-    } else if (answerType.value === 'yesno') {
-      correct.value = (r.correct === 'no' ? 'no' : 'yes')
-    } else if (answerType.value === 'number') {
-      correctNumber.value = Number(r.correct) || 0
     }
   } catch (e) {
     err.value = 'AI: ' + (e.message || 'failed')
