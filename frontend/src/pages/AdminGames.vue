@@ -1,10 +1,7 @@
 <template>
   <main class="stack">
     <div class="card stack">
-      <div class="row between">
-        <h1>Games</h1>
-        <button class="muted" @click="logout">Sign out</button>
-      </div>
+      <h1>Games</h1>
 
       <div class="row">
         <input v-model="name" placeholder="Event name (optional)" />
@@ -40,6 +37,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api.js'
+import { useGameStore } from '../stores/game.js'
+import { confirm } from '../services/dialog.js'
 
 const games = ref([])
 const code = ref('')
@@ -48,6 +47,7 @@ const loading = ref(false)
 const deleting = ref('')
 const err = ref('')
 const router = useRouter()
+const store = useGameStore()
 
 onMounted(async () => {
   if (!localStorage.getItem('adminToken')) { router.replace('/admin'); return }
@@ -59,7 +59,7 @@ async function refresh() {
     games.value = await api.adminGames() || []
   } catch (e) {
     if (String(e.message).toLowerCase().includes('unauthorized')) {
-      localStorage.removeItem('adminToken'); router.replace('/admin')
+      store.logoutAdmin(); router.replace('/admin')
     } else err.value = e.message
   }
 }
@@ -81,7 +81,15 @@ async function create() {
 
 async function remove(g) {
   const label = g.name ? `"${g.name}" (${g.code})` : g.code
-  if (!confirm(`Delete ${label}? This permanently removes the game, its players, questions, and answers.`)) return
+  const ok = await confirm({
+    title: `Delete ${label}?`,
+    message: 'This permanently removes the game, its players, questions, and answers. This action cannot be undone.',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Keep',
+    tone: 'danger',
+    icon: '🗑️',
+  })
+  if (!ok) return
   err.value = ''
   deleting.value = g.code
   try {
@@ -94,8 +102,4 @@ async function remove(g) {
   }
 }
 
-function logout() {
-  localStorage.removeItem('adminToken')
-  router.replace('/admin')
-}
 </script>

@@ -84,7 +84,7 @@
         <div v-else class="muted">No active question.</div>
 
         <div class="row" style="flex-wrap: wrap;">
-          <button class="btn-primary" v-if="game?.questionState !== 'active'" @click="activateNext">▶ {{ currentQ ? 'Next question' : 'Start first question' }}</button>
+          <button class="btn-primary" v-if="!currentQ" @click="activateNext">▶ Start first question</button>
           <button class="btn-accent" v-if="game?.questionState === 'active'" @click="reveal">Reveal answer</button>
           <button v-if="game?.questionState === 'revealed'" class="btn-primary" @click="next">Next →</button>
         </div>
@@ -137,9 +137,12 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api.js'
 import { onMessage, wsConnectAdmin, disconnect } from '../services/ws.js'
+import { useGameStore } from '../stores/game.js'
+import { confirm } from '../services/dialog.js'
 
 const props = defineProps({ code: String })
 const router = useRouter()
+const store = useGameStore()
 
 const game = ref(null)
 const users = ref([])
@@ -170,7 +173,7 @@ async function load() {
     questions.value = r.questions || []
   } catch (e) {
     if (String(e.message).toLowerCase().includes('unauthorized')) {
-      localStorage.removeItem('adminToken'); router.replace('/admin'); return
+      store.logoutAdmin(); router.replace('/admin'); return
     }
     err.value = e.message
   }
@@ -231,7 +234,15 @@ async function startGame() {
 }
 
 async function endGame() {
-  if (!confirm('End the game now? Players will see the final leaderboard.')) return
+  const ok = await confirm({
+    title: 'End the game now?',
+    message: 'Players will see the final leaderboard. Remaining questions will be skipped.',
+    confirmLabel: 'End game',
+    cancelLabel: 'Keep playing',
+    tone: 'danger',
+    icon: '⏹',
+  })
+  if (!ok) return
   try { await api.adminFinish(props.code) } catch (e) { err.value = e.message }
 }
 

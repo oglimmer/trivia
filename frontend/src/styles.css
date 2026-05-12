@@ -141,19 +141,117 @@ label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 6p
 .row.between { justify-content: space-between; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-.header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 0 8px;
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin: 0 -16px 16px;
+  padding: 0 16px;
+  background: rgba(11, 16, 32, .78);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--border);
 }
-.header h1 { font-size: 1.1rem; margin: 0; letter-spacing: .04em; }
-.header .logo {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-weight: 700; color: var(--accent);
+.app-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 0;
 }
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--accent);
+  text-decoration: none;
+}
+.brand:hover { filter: brightness(1.1); }
+.app-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .tag {
-  display: inline-block; padding: 3px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center;
+  padding: 3px 8px; border-radius: 999px;
   background: var(--surface-2); border: 1px solid var(--border);
   font-size: .75rem; color: var(--muted);
+}
+.tag--admin {
+  color: var(--accent);
+  border-color: rgba(124, 92, 255, .5);
+  background: rgba(124, 92, 255, .14);
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.conn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: .72rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.conn__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+.conn--live { color: var(--accent-2); border-color: rgba(54, 211, 164, .4); }
+.conn--off  { color: var(--warn); border-color: rgba(255, 181, 71, .4); }
+
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 180px;
+}
+.who__meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.who__name {
+  font-weight: 600;
+  font-size: .9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.who__code {
+  font-size: .7rem;
+  color: var(--muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.avatar-sm { width: 28px; height: 28px; }
+
+.btn-sm {
+  padding: 7px 12px;
+  font-size: .85rem;
+  border-radius: 10px;
+}
+
+@media (max-width: 480px) {
+  .conn { display: none; }
+  .who { max-width: 130px; }
+}
+@media (max-width: 360px) {
+  .who__code { display: none; }
+  .brand span { display: none; }
 }
 
 .avatar {
@@ -246,6 +344,50 @@ label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 6p
   gap: 14px;
 }
 
+.dialog { text-align: center; align-items: center; }
+.dialog__icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  width: 64px; height: 64px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.dialog--danger .dialog__icon {
+  background: rgba(255, 93, 115, .12);
+  border-color: rgba(255, 93, 115, .35);
+}
+.dialog__title {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+.dialog__msg {
+  margin: 0;
+  color: var(--muted);
+  font-size: .95rem;
+  line-height: 1.45;
+}
+.dialog__actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+.dialog__btn { flex: 1; }
+
+.dialog-enter-active, .dialog-leave-active {
+  transition: opacity .18s ease;
+}
+.dialog-enter-active .modal, .dialog-leave-active .modal {
+  transition: transform .22s cubic-bezier(.2,.9,.3,1.2), opacity .18s ease;
+}
+.dialog-enter-from, .dialog-leave-to { opacity: 0; }
+.dialog-enter-from .modal { transform: scale(.94) translateY(8px); opacity: 0; }
+.dialog-leave-to .modal { transform: scale(.98); opacity: 0; }
+
 .spinner {
   width: 44px; height: 44px;
   border-radius: 50%;
@@ -270,4 +412,5 @@ label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 6p
 
 @media (min-width: 720px) {
   #app { padding: 24px; }
+  .app-header { margin: 0 -24px 20px; padding: 0 24px; }
 }

@@ -16,11 +16,13 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api.js'
+import { useGameStore } from '../stores/game.js'
 
 const pwd = ref('')
 const loading = ref(false)
 const err = ref('')
 const router = useRouter()
+const store = useGameStore()
 
 onMounted(() => {
   if (localStorage.getItem('adminToken')) router.replace('/admin/games')
@@ -31,7 +33,7 @@ async function login() {
   loading.value = true
   try {
     const r = await api.adminLogin(pwd.value)
-    localStorage.setItem('adminToken', r.token)
+    store.setAdmin(r.token)
     router.push('/admin/games')
   } catch (e) {
     err.value = e.message || 'login failed'

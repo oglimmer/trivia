@@ -13,6 +13,7 @@ export const useGameStore = defineStore('game', {
     answers: [],
     lastAnswerAck: null,
     wsStarted: false,
+    isAdmin: !!localStorage.getItem('adminToken'),
   }),
   getters: {
     isPlayer: (s) => !!s.me,
@@ -50,6 +51,14 @@ export const useGameStore = defineStore('game', {
       this.me = null
       this.game = null
       this.wsStarted = false
+    },
+    setAdmin(token) {
+      localStorage.setItem('adminToken', token)
+      this.isAdmin = true
+    },
+    logoutAdmin() {
+      localStorage.removeItem('adminToken')
+      this.isAdmin = false
     },
     _handle(m) {
       switch (m.type) {
