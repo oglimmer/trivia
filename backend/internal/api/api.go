@@ -649,7 +649,8 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) onWSJoin(c *ws.Client) {
-	// On join, push the current state to the just-connected client.
+	// On join (initial connect or a wake-time reconnect), push enough state for
+	// the client to fully refresh without an extra HTTP round-trip.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	g, err := s.DB.GameByID(ctx, c.GameID)
@@ -657,6 +658,14 @@ func (s *Server) onWSJoin(c *ws.Client) {
 		return
 	}
 	c.Send(s.gameStateEnvelope(ctx, g, c.Role == ws.RoleAdmin))
+	if users, err := s.DB.ListUsers(ctx, c.GameID); err == nil {
+		c.Send(map[string]any{"type": "users", "data": users})
+	}
+	if c.Role == ws.RoleAdmin {
+		if qs, err := s.DB.ListQuestions(ctx, c.GameID, true); err == nil {
+			c.Send(map[string]any{"type": "questionsAdmin", "data": qs})
+		}
+	}
 }
 
 type wsInbound struct {
@@ -672,6 +681,8 @@ func (s *Server) onWSMessage(c *ws.Client, b []byte) {
 	switch m.Type {
 	case "answer":
 		s.handleAnswer(c, m.Data)
+	case "ping":
+		c.Send(map[string]any{"type": "pong"})
 	}
 }
 
