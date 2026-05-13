@@ -431,10 +431,26 @@ execute_dev_command() {
 
 # Show current versions
 show_versions() {
-    local frontend_version
+    local frontend_version git_tag
     frontend_version=$(grep '"version"' "$FRONTEND_DIR/package.json" | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+    git_tag=$(git -C "$SCRIPT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "(none)")
 
-    echo "Frontend version: $frontend_version"
+    echo "Latest git tag:          $git_tag"
+    echo "Frontend (package.json): $frontend_version"
+}
+
+# Resolve the build-time version. Git tags are the source of truth; fall back
+# to package.json (kept in sync by the release flow) and finally to "dev".
+resolve_app_version() {
+    local v
+    v=$(git -C "$SCRIPT_DIR" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+    if [[ -z "$v" ]]; then
+        v=$(grep '"version"' "$FRONTEND_DIR/package.json" 2>/dev/null | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+    fi
+    if [[ -z "$v" ]]; then
+        v="dev"
+    fi
+    echo "$v"
 }
 
 # Bump semantic version
@@ -608,9 +624,10 @@ execute_build() {
     log_info "Starting build process..."
 
     local app_version git_commit build_time
-    app_version=$(grep '"version"' "$FRONTEND_DIR/package.json" | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-    git_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    app_version=$(resolve_app_version)
+    git_commit=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
     build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    log_info "Build version: $app_version (commit $git_commit)"
 
     log_verbose "Build metadata: version=$app_version commit=$git_commit time=$build_time"
 
@@ -677,25 +694,65 @@ execute_release() {
 
     # Update frontend version
     log_info "Updating frontend version to $new_version..."
-    (cd "$FRONTEND_DIR" && npm version "$new_version" --no-git-tag-version)
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} cd $FRONTEND_DIR && npm version $new_version --no-git-tag-version"
+    else
+        (cd "$FRONTEND_DIR" && npm version "$new_version" --no-git-tag-version)
+    fi
 
     # Update Helm chart version and appVersion
     local chart_file="$SCRIPT_DIR/helm/trivia/Chart.yaml"
     log_info "Updating Helm chart version to $new_version..."
-    sed -i '' "s/^version:.*/version: $new_version/" "$chart_file"
-    sed -i '' "s/^appVersion:.*/appVersion: \"$new_version\"/" "$chart_file"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} sed -i '' \"s/^version:.*/version: $new_version/\" $chart_file"
+        echo -e "${YELLOW}[DRY-RUN]${RESET} sed -i '' \"s/^appVersion:.*/appVersion: \\\"$new_version\\\"/\" $chart_file"
+    else
+        sed -i '' "s/^version:.*/version: $new_version/" "$chart_file"
+        sed -i '' "s/^appVersion:.*/appVersion: \"$new_version\"/" "$chart_file"
+    fi
 
-    # Commit, tag, and push — the tag push triggers the GitHub Actions release workflow
+    # Commit, tag, and push
     log_info "Committing version changes and creating tag..."
-    git add "$FRONTEND_DIR/package.json" "$FRONTEND_DIR/package-lock.json" "$chart_file"
-    git commit -m "Release v$new_version"
-    git tag -a "v$new_version" -m "Release v$new_version"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} git add $FRONTEND_DIR/package.json $FRONTEND_DIR/package-lock.json $chart_file"
+        echo -e "${YELLOW}[DRY-RUN]${RESET} git commit -m \"Release v$new_version\""
+        echo -e "${YELLOW}[DRY-RUN]${RESET} git tag -a v$new_version -m \"Release v$new_version\""
+    else
+        git add "$FRONTEND_DIR/package.json" "$FRONTEND_DIR/package-lock.json" "$chart_file"
+        git commit -m "Release v$new_version"
+        git tag -a "v$new_version" -m "Release v$new_version"
+    fi
 
     log_info "Pushing commit and tag to origin..."
-    git push origin HEAD
-    git push origin "v$new_version"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} git push origin HEAD"
+        echo -e "${YELLOW}[DRY-RUN]${RESET} git push origin v$new_version"
+    else
+        git push origin HEAD
+        git push origin "v$new_version"
+    fi
 
-    log_success "Release v$new_version tagged and pushed. GitHub Actions will build and publish the images."
+    log_success "Release v$new_version tagged and pushed."
+
+    # Build and push images tagged with the new version AND :latest.
+    # The version flows into the images via Docker build args (VITE_APP_VERSION
+    # for the frontend, VERSION for the Go ldflags in the backend) so the
+    # footer and /api/version reflect the released version.
+    log_info "Building and pushing release images (version + latest tags)..."
+    FRONTEND_IMAGES=()
+    BACKEND_IMAGES=()
+    for registry in "${REGISTRIES[@]}"; do
+        FRONTEND_IMAGES+=("$registry/trivia-frontend:$new_version")
+        FRONTEND_IMAGES+=("$registry/trivia-frontend:latest")
+        BACKEND_IMAGES+=("$registry/trivia-backend:$new_version")
+        BACKEND_IMAGES+=("$registry/trivia-backend:latest")
+    done
+
+    BUILD_FRONTEND=true
+    BUILD_BACKEND=true
+    execute_build
+
+    log_success "Release v$new_version built and pushed to ${#REGISTRIES[@]} registry/registries."
 }
 
 # Main execution function
