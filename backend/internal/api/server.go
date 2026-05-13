@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/oglimmer/trivia/backend/internal/ai"
-	"github.com/oglimmer/trivia/backend/internal/db"
 	"github.com/oglimmer/trivia/backend/internal/game"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
 // Server is the HTTP API plus the live WebSocket hub.
 type Server struct {
-	DB  *db.DB
+	DB  Store
 	Hub *ws.Hub
 	AI  *ai.Client
 
@@ -28,7 +27,7 @@ type Server struct {
 	autoClose   map[string]*time.Timer
 }
 
-func New(d *db.DB, h *ws.Hub, c *ai.Client) *Server {
+func New(d Store, h *ws.Hub, c *ai.Client) *Server {
 	s := &Server{
 		DB: d, Hub: h, AI: c,
 		gameLocks: map[string]*sync.Mutex{},

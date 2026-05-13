@@ -30,10 +30,15 @@ type SuggestResponse struct {
 	Correct any      `json:"correct"`
 }
 
+// defaultBaseURL is the Anthropic Messages API root. Tests override BaseURL
+// to point at an httptest server.
+const defaultBaseURL = "https://api.anthropic.com"
+
 type Client struct {
-	APIKey string
-	Model  string
-	HTTP   *http.Client
+	APIKey  string
+	Model   string
+	BaseURL string
+	HTTP    *http.Client
 }
 
 func New() *Client {
@@ -42,9 +47,10 @@ func New() *Client {
 		model = "claude-sonnet-4-6"
 	}
 	return &Client{
-		APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		Model:  model,
-		HTTP:   &http.Client{Timeout: 30 * time.Second},
+		APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+		Model:   model,
+		BaseURL: defaultBaseURL,
+		HTTP:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -125,7 +131,11 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestRespo
 	}
 	buf, _ := json.Marshal(body)
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(buf))
+	base := c.BaseURL
+	if base == "" {
+		base = defaultBaseURL
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", base+"/v1/messages", bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
