@@ -1,3 +1,10 @@
+export interface BackendBuildInfo {
+  name: string
+  version: string
+  gitCommit: string
+  buildTime: string
+}
+
 export type AnswerType = 'yesno' | 'choice' | 'number'
 export type GameState = 'setup' | 'game' | 'finished'
 export type QuestionState = 'idle' | 'active' | 'revealed'

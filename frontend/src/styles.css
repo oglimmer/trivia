@@ -1239,12 +1239,40 @@ label {
 /* ---------- Footer ---------- */
 .foot {
   margin-top: 28px;
+  margin-bottom: 16px;
   text-align: center;
-  font-size: .78rem;
   color: var(--muted);
+}
+.foot__tagline {
+  font-size: .78rem;
   letter-spacing: .08em;
   text-transform: uppercase;
   font-weight: 700;
+}
+.foot__versions {
+  margin-top: 8px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .02em;
+  color: var(--muted);
+  opacity: .75;
+}
+.foot__verLabel {
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .12em;
+  margin-right: 4px;
+}
+.foot__sep {
+  opacity: .4;
+}
+@media (max-width: 520px) {
+  .foot__versions { flex-direction: column; gap: 2px; }
+  .foot__sep { display: none; }
 }
 
 /* ---------- Responsive ---------- */

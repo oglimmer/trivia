@@ -3,7 +3,15 @@ WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download || true
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server ./cmd/server
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-s -w \
+              -X github.com/oglimmer/trivia/backend/internal/buildinfo.Version=${VERSION} \
+              -X github.com/oglimmer/trivia/backend/internal/buildinfo.Commit=${GIT_COMMIT} \
+              -X github.com/oglimmer/trivia/backend/internal/buildinfo.Time=${BUILD_TIME}" \
+    -o /out/server ./cmd/server
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates

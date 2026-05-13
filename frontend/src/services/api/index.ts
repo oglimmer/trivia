@@ -1,4 +1,5 @@
 export { playerApi } from './player'
 export { adminApi } from './admin'
+export { systemApi } from './system'
 export type { JoinBody, QuestionBody, AISuggestBody } from './player'
 export type { CreateGameBody, UpdateSettingsBody } from './admin'
