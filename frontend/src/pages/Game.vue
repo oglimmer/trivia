@@ -138,11 +138,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, toRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { useGameStore } from '../stores/game'
-import { wsSend } from '../services/ws'
-import { api } from '../services/api'
+import { useGameStore } from '@/stores/game'
+import { wsSend } from '@/services/ws'
+import { playerApi } from '@/services/api'
+import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 
 type VerdictKind = 'correct' | 'wrong' | 'none'
 
@@ -151,10 +152,12 @@ const router = useRouter()
 const store = useGameStore()
 
 const numberGuess = ref<number | ''>('')
-const remaining = ref(30)
-const ringPct = ref(100)
-let tickHandle: ReturnType<typeof setInterval> | null = null
 const letters = ['A', 'B', 'C', 'D']
+
+const { remaining, ringPct } = useQuestionCountdown(
+  toRef(store, 'game'),
+  { serverClockOffsetMs: toRef(store, 'serverClockOffsetMs') },
+)
 
 const q = computed(() => store.question)
 const qState = computed(() => store.game && store.game.questionState)
@@ -226,7 +229,7 @@ onMounted(async () => {
   if (!store.me) { router.replace('/'); return }
   store.ensureWS()
   try {
-    store.users = await api.listUsers(props.code)
+    store.setUsers(await playerApi.listUsers(props.code))
   } catch {}
 })
 
@@ -235,26 +238,10 @@ watch(() => store.game && store.game.state, (s) => {
   if (s === 'finished') router.replace(`/g/${props.code}/results`)
 })
 
-watch(() => [qState.value, store.game && store.game.questionStartedAt], () => {
-  resetTick()
-})
-
-function resetTick() {
-  if (tickHandle) { clearInterval(tickHandle); tickHandle = null }
+// Clear the user's number input each time a new question starts.
+watch(() => [qState.value, store.game?.questionStartedAt], () => {
   numberGuess.value = ''
-  if (qState.value !== 'active') return
-  const startedAt = store.game && store.game.questionStartedAt ? new Date(store.game.questionStartedAt).getTime() : Date.now()
-  const total = (store.game && store.game.questionTimeoutSeconds) || 30
-  const tick = () => {
-    // Compare server-anchored times so the countdown isn't biased by a skewed local clock.
-    const elapsed = (Date.now() + store.serverClockOffsetMs - startedAt) / 1000
-    const left = Math.max(0, total - elapsed)
-    remaining.value = Math.max(0, Math.ceil(left))
-    ringPct.value = Math.round((left / total) * 100)
-  }
-  tick()
-  tickHandle = setInterval(tick, 200)
-}
+})
 
 function answer(v: unknown) {
   if (!q.value) return

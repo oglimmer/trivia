@@ -32,8 +32,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
+import { adminApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
 
 const pwd = ref('')
 const loading = ref(false)
@@ -49,11 +50,11 @@ async function login() {
   err.value = ''
   loading.value = true
   try {
-    const r = await api.adminLogin(pwd.value)
+    const r = await adminApi.login(pwd.value)
     store.setAdmin(r.token)
     router.push('/admin/games')
   } catch (e) {
-    err.value = (e as Error).message || 'login failed'
+    err.value = errMsg(e, 'login failed')
   } finally {
     loading.value = false
   }

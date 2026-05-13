@@ -52,11 +52,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import PhotoPicker from './PhotoPicker.vue'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
-import type { User } from '../types'
+import { playerApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { useModal } from '@/composables/useModal'
+import { errMsg } from '@/composables/errMsg'
 
 const props = defineProps<{ open?: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -68,9 +69,6 @@ const err = ref('')
 const saving = ref(false)
 const nameEl = ref<HTMLInputElement | null>(null)
 
-let prevFocus: Element | null = null
-let prevOverflow = ''
-
 const canSave = computed(() => {
   const trimmed = name.value.trim()
   if (!trimmed) return false
@@ -79,27 +77,17 @@ const canSave = computed(() => {
   return trimmed !== curName || photo.value !== curPhoto
 })
 
-watch(() => props.open, async (v) => {
+// Reset fields when opening; useModal handles focus + body scroll.
+watch(() => props.open, (v) => {
   if (v) {
     name.value = store.me?.name || ''
     photo.value = store.me?.photoB64 || ''
     err.value = ''
     saving.value = false
-    prevFocus = document.activeElement
-    prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    await nextTick()
-    nameEl.value?.focus()
-  } else {
-    document.body.style.overflow = prevOverflow
-    if (prevFocus && 'focus' in prevFocus && typeof (prevFocus as HTMLElement).focus === 'function') (prevFocus as HTMLElement).focus()
-    prevFocus = null
   }
 })
 
-onUnmounted(() => {
-  if (props.open) document.body.style.overflow = prevOverflow
-})
+useModal(() => !!props.open, () => nameEl.value)
 
 function close() {
   if (saving.value) return
@@ -111,11 +99,11 @@ async function save() {
   saving.value = true
   try {
     const newName = name.value.trim()
-    await api.updateMe({ name: newName, photoB64: photo.value })
-    store.me = { ...(store.me || {} as User), name: newName, photoB64: photo.value }
+    await playerApi.updateMe({ name: newName, photoB64: photo.value })
+    store.updateMe({ name: newName, photoB64: photo.value })
     emit('close')
   } catch (e) {
-    err.value = (e as Error).message || 'Could not save'
+    err.value = errMsg(e, 'Could not save')
   } finally {
     saving.value = false
   }

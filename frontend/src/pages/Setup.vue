@@ -10,7 +10,7 @@
 
       <!-- Step 1: Photo -->
       <div v-else-if="step === 'photo'" key="photo" class="card stack">
-        <Stepper :current="1" :photo="photo" />
+        <Stepper :current="1" />
         <span class="tag tag--yellow" style="align-self: flex-start;">Step 1 of 3</span>
         <h1 style="margin: 16px 0 0;">Set up your question for the quiz</h1>
         <p class="muted" style="margin-top: 16px;">
@@ -27,7 +27,7 @@
 
       <!-- Step 2: AI or manual -->
       <div v-else-if="step === 'ai-choice'" key="ai-choice" class="card stack">
-        <Stepper :current="2" :photo="photo" />
+        <Stepper :current="2" />
         <span class="tag tag--yellow" style="align-self: flex-start;">Step 2 of 3</span>
         <h1 style="margin: 16px 0 0;">How should we make it?</h1>
         <p class="muted" style="margin-top: 16px;">
@@ -61,7 +61,7 @@
 
       <!-- Step 3: Editor -->
       <div v-else key="editor" class="card stack">
-        <Stepper :current="3" :photo="photo" />
+        <Stepper :current="3" />
         <span class="tag tag--yellow" style="align-self: flex-start;">Step 3 of 3</span>
         <h1 style="margin: 16px 0 0;">Your question</h1>
         <p class="muted" style="margin-top: 16px;">Write the question and set the right answer.</p>
@@ -178,12 +178,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, h } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import PhotoPicker from '../components/PhotoPicker.vue'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
-import type { AnswerType, Question } from '../types'
+import PhotoPicker from '@/components/PhotoPicker.vue'
+import Stepper from '@/components/Stepper.vue'
+import { playerApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
+import type { AnswerType, Question } from '@/types'
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -203,35 +205,6 @@ const err = ref('')
 const aiBusy = ref(false)
 const aiConfirm = ref(false)
 const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
-
-interface StepperProps { current: number; photo: string }
-const Stepper = {
-  props: {
-    current: { type: Number, required: true },
-    photo: { type: String, required: true },
-  },
-  setup(p: StepperProps) {
-    return () => {
-      const steps = [
-        { n: 1, label: 'Photo' },
-        { n: 2, label: 'AI?' },
-        { n: 3, label: 'Details' },
-      ]
-      const nodes: ReturnType<typeof h>[] = []
-      steps.forEach((s, i) => {
-        const state = s.n < p.current ? 'done' : s.n === p.current ? 'active' : ''
-        nodes.push(h('div', { class: ['stepper__step', state] }, [
-          h('div', { class: 'stepper__dot' }, state === 'done' ? '✓' : String(s.n)),
-          h('div', { class: 'stepper__label' }, s.label),
-        ]))
-        if (i < steps.length - 1) {
-          nodes.push(h('div', { class: ['stepper__bar', s.n < p.current ? 'done' : ''] }))
-        }
-      })
-      return h('div', { class: 'stepper', 'aria-label': `Step ${p.current} of 3` }, nodes)
-    }
-  },
-}
 
 const users = computed(() => store.users)
 
@@ -265,14 +238,13 @@ onMounted(async () => {
   if (!store.me) { router.replace('/'); return }
   store.ensureWS()
   try {
-    const list = await api.listUsers(props.code)
-    store.users = list
+    store.setUsers(await playerApi.listUsers(props.code))
   } catch {}
   if (store.game && store.game.state === 'game') router.replace(`/g/${props.code}/play`)
   if (store.game && store.game.state === 'finished') router.replace(`/g/${props.code}/results`)
 
   try {
-    const qs = await api.listQuestions(props.code)
+    const qs = await playerApi.listQuestions(props.code)
     const mine = qs.find(q => q.userId === store.me?.id)
     if (mine) hydrateFromQuestion(mine)
   } catch {}
@@ -317,7 +289,7 @@ async function useAIPath() {
   err.value = ''
   aiBusy.value = true
   try {
-    const r = await api.aiSuggest({
+    const r = await playerApi.aiSuggest({
       hint: '',
       answerType: 'choice',
       photoB64: photo.value,
@@ -330,7 +302,7 @@ async function useAIPath() {
     }
     step.value = 'editor'
   } catch (e) {
-    err.value = 'AI: ' + ((e as Error).message || 'failed')
+    err.value = 'AI: ' + errMsg(e, 'failed')
   } finally {
     aiBusy.value = false
   }
@@ -356,11 +328,11 @@ async function save() {
     if (answerType.value === 'yesno') body.correct = correct.value
     else if (answerType.value === 'choice') body.correct = correctIdx.value
     else body.correct = Number(correctNumber.value)
-    await api.putQuestion(props.code, body)
+    await playerApi.putQuestion(props.code, body)
     saved.value = true
     editing.value = false
   } catch (e) {
-    err.value = (e as Error).message || 'Could not save'
+    err.value = errMsg(e, 'Could not save')
   } finally {
     loading.value = false
   }
@@ -376,7 +348,7 @@ async function confirmAI() {
   err.value = ''
   aiBusy.value = true
   try {
-    const r = await api.aiSuggest({
+    const r = await playerApi.aiSuggest({
       hint: text.value || '',
       answerType: 'choice',
       photoB64: photo.value,
@@ -388,7 +360,7 @@ async function confirmAI() {
       correctIdx.value = Number(r.correct) || 0
     }
   } catch (e) {
-    err.value = 'AI: ' + ((e as Error).message || 'failed')
+    err.value = 'AI: ' + errMsg(e, 'failed')
   } finally {
     aiBusy.value = false
   }

@@ -65,9 +65,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import PhotoPicker from '../components/PhotoPicker.vue'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
+import PhotoPicker from '@/components/PhotoPicker.vue'
+import { playerApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -84,11 +85,11 @@ async function submit() {
   err.value = ''
   loading.value = true
   try {
-    const r = await api.joinGame(props.code, { name: name.value.trim(), photoB64: photo.value })
+    const r = await playerApi.joinGame(props.code, { name: name.value.trim(), photoB64: photo.value })
     store.setMe(r.token, { id: r.userId, name: name.value.trim(), gameId: r.gameId })
     router.push(`/g/${props.code}/setup`)
   } catch (e) {
-    err.value = (e as Error).message || 'Could not join'
+    err.value = errMsg(e, 'Could not join')
   } finally {
     loading.value = false
   }

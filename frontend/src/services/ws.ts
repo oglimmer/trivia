@@ -1,7 +1,7 @@
 // Single WebSocket connection per page. Auto-reconnect with backoff.
 // Emits typed messages to listeners.
 
-import type { WSListener, WSMessage } from '../types'
+import type { WSListener, WSMessage } from '@/types'
 
 const listeners = new Set<WSListener>()
 let ws: WebSocket | null = null

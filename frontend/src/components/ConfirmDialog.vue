@@ -35,36 +35,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, onUnmounted } from 'vue'
-import { dialogState, resolveDialog } from '../services/dialog'
+import { computed, ref } from 'vue'
+import { dialogState, resolveDialog } from '@/services/dialog'
+import { useModal } from '@/composables/useModal'
 
 const d = computed(() => dialogState.current)
 const cancelBtn = ref<HTMLButtonElement | null>(null)
 const confirmBtn = ref<HTMLButtonElement | null>(null)
 const titleId = 'dlg-title'
 const msgId = 'dlg-msg'
-let prevFocus: Element | null = null
-let prevOverflow = ''
 
 function confirm() { resolveDialog(true) }
 function cancel() { resolveDialog(false) }
 
-watch(d, async (cur) => {
-  if (cur) {
-    prevFocus = document.activeElement
-    prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    await nextTick()
-    const target = cur.tone === 'danger' ? cancelBtn.value : confirmBtn.value
-    target?.focus()
-  } else {
-    document.body.style.overflow = prevOverflow
-    if (prevFocus && 'focus' in prevFocus && typeof (prevFocus as HTMLElement).focus === 'function') (prevFocus as HTMLElement).focus()
-    prevFocus = null
-  }
-})
-
-onUnmounted(() => {
-  if (d.value) document.body.style.overflow = prevOverflow
-})
+useModal(
+  () => !!d.value,
+  () => (d.value?.tone === 'danger' ? cancelBtn.value : confirmBtn.value),
+)
 </script>

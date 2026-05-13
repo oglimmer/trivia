@@ -39,9 +39,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
-import type { GameState } from '../types'
+import { playerApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
+import type { GameState } from '@/types'
 
 const router = useRouter()
 const code = ref('')
@@ -67,11 +68,11 @@ async function join() {
   loading.value = true
   try {
     const c = code.value.trim().toLowerCase()
-    const g = await api.getGame(c)
+    const g = await playerApi.getGame(c)
     if (g.state === 'setup') router.push(`/g/${c}/join`)
     else router.push(`/g/${c}/play`)
   } catch (e) {
-    err.value = (e as Error).message || 'No game with that code'
+    err.value = errMsg(e, 'No game with that code')
   } finally {
     loading.value = false
   }

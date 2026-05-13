@@ -11,9 +11,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
-import { disconnect } from '../services/ws'
+import { playerApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
+import { disconnect } from '@/services/ws'
 
 const router = useRouter()
 const store = useGameStore()
@@ -35,13 +36,12 @@ onMounted(async () => {
   disconnect()
   store.logoutAdmin()
   store.logout()
-  localStorage.setItem('playerToken', token)
-  store.wsStarted = false
 
   try {
-    const r = await api.me()
-    store.me = r.user
-    store.game = r.game
+    localStorage.setItem('playerToken', token)
+    const r = await playerApi.me()
+    store.setMe(token, r.user)
+    store.setGame(r.game)
     history.replaceState(null, '', '/')
     const code = r.game?.code
     const state = r.game?.state
@@ -52,7 +52,7 @@ onMounted(async () => {
     else router.replace('/')
   } catch (e) {
     localStorage.removeItem('playerToken')
-    err.value = (e as Error).message || 'Invalid or expired token.'
+    err.value = errMsg(e, 'Invalid or expired token.')
   }
 })
 </script>

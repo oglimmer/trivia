@@ -50,9 +50,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useGameStore } from '../stores/game'
-import { api } from '../services/api'
-import Spotlight from '../components/Spotlight.vue'
+import { useGameStore } from '@/stores/game'
+import { playerApi } from '@/services/api'
+import Spotlight from '@/components/Spotlight.vue'
 
 const props = defineProps<{ code: string }>()
 const store = useGameStore()
@@ -66,7 +66,7 @@ onMounted(async () => {
   await store.loadMe()
   store.ensureWS()
   try {
-    store.leaderboard = await api.leaderboard(props.code)
+    store.setLeaderboard(await playerApi.leaderboard(props.code))
   } catch {}
   if (leaderboard.value.length < 3) phase.value = leaderboard.value.length === 0 ? 'ladder' : 'one'
 })

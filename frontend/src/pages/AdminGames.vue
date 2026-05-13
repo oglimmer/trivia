@@ -55,10 +55,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api'
-import { useGameStore } from '../stores/game'
-import { confirm } from '../services/dialog'
-import type { AdminGamesEntry } from '../types'
+import { adminApi } from '@/services/api'
+import { useGameStore } from '@/stores/game'
+import { errMsg } from '@/composables/errMsg'
+import { confirm } from '@/services/dialog'
+import type { AdminGamesEntry } from '@/types'
 
 const games = ref<AdminGamesEntry[]>([])
 const code = ref('')
@@ -83,9 +84,9 @@ onUnmounted(() => {
 
 async function refresh() {
   try {
-    games.value = await api.adminGames() || []
+    games.value = await adminApi.listGames() || []
   } catch (e) {
-    const msg = (e as Error).message
+    const msg = errMsg(e)
     if (String(msg).toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin')
     } else err.value = msg
@@ -96,7 +97,7 @@ async function create() {
   err.value = ''
   loading.value = true
   try {
-    const g = await api.adminCreateGame({
+    const g = await adminApi.createGame({
       code: code.value.trim().toLowerCase(),
       name: name.value,
       questionTimeoutSeconds: Number(timeoutSeconds.value) || 30,
@@ -106,7 +107,7 @@ async function create() {
     timeoutSeconds.value = 30
     router.push(`/admin/games/${g.code}`)
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     loading.value = false
   }
@@ -126,10 +127,10 @@ async function remove(g: AdminGamesEntry) {
   err.value = ''
   deleting.value = g.code
   try {
-    await api.adminDeleteGame(g.code)
+    await adminApi.deleteGame(g.code)
     games.value = games.value.filter(x => x.id !== g.id)
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     deleting.value = ''
   }

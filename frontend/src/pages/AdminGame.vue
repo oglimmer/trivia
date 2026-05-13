@@ -200,11 +200,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api'
-import { onMessage, wsConnectAdmin, disconnect } from '../services/ws'
-import { useGameStore } from '../stores/game'
-import { confirm } from '../services/dialog'
-import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '../types'
+import { adminApi } from '@/services/api'
+import { onMessage, wsConnectAdmin, disconnect } from '@/services/ws'
+import { useGameStore } from '@/stores/game'
+import { confirm } from '@/services/dialog'
+import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
+import { errMsg } from '@/composables/errMsg'
+import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/types'
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -218,18 +220,18 @@ const leaderboard = ref<LeaderboardEntry[]>([])
 const playerAnswered = ref<Set<string>>(new Set())
 const online = ref<Set<string>>(new Set())
 const err = ref('')
-const remaining = ref(0)
 const timeoutDraft = ref(30)
 const savingTimeout = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
 const copyingUser = ref('')
 const copiedUser = ref('')
-let tick: ReturnType<typeof setInterval> | null = null
 let stopListening: (() => void) | null = null
 const letters = ['A', 'B', 'C', 'D']
 // Server-anchored clock offset (ms). Refreshed on every gameState arrival.
-let serverClockOffsetMs = 0
+const serverClockOffsetMs = ref(0)
+
+const { remaining } = useQuestionCountdown(game, { serverClockOffsetMs, intervalMs: 250 })
 
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
 const onlineCount = computed(() => users.value.filter(u => online.value.has(u.id)).length)
@@ -244,15 +246,15 @@ function hasQuestion(uid: string): boolean {
 
 async function load() {
   try {
-    const r = await api.adminGame(props.code)
+    const r = await adminApi.getGame(props.code)
     game.value = r.game
     users.value = r.users || []
     questions.value = r.questions || []
     online.value = new Set(r.online || [])
     timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
   } catch (e) {
-    const msg = (e as Error).message
-    if (String(msg).toLowerCase().includes('unauthorized')) {
+    const msg = errMsg(e)
+    if (msg.toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin'); return
     }
     err.value = msg
@@ -261,7 +263,7 @@ async function load() {
 
 function applyState(d: GameStateMsg) {
   if (d.serverNow) {
-    serverClockOffsetMs = new Date(d.serverNow).getTime() - Date.now()
+    serverClockOffsetMs.value = new Date(d.serverNow).getTime() - Date.now()
   }
   game.value = {
     ...(game.value || {} as Game),
@@ -295,19 +297,9 @@ onMounted(async () => {
     else if (m.type === 'presence') online.value = new Set((m.data as { online?: string[] }).online || [])
   })
   wsConnectAdmin(localStorage.getItem('adminToken') || '', props.code)
-
-  tick = setInterval(() => {
-    if (game.value?.questionState === 'active' && game.value?.questionStartedAt) {
-      const s = new Date(game.value.questionStartedAt).getTime()
-      const total = game.value.questionTimeoutSeconds || 30
-      const elapsed = (Date.now() + serverClockOffsetMs - s) / 1000
-      remaining.value = Math.max(0, Math.ceil(total - elapsed))
-    }
-  }, 250)
 })
 
 onUnmounted(() => {
-  if (tick) clearInterval(tick)
   if (stopListening) stopListening()
   disconnect()
 })
@@ -316,17 +308,17 @@ watch(() => game.value && game.value.state, () => { /* stay on page */ })
 
 async function startGame() {
   err.value = ''
-  try { await api.adminSetState(props.code, 'game') }
-  catch (e) { err.value = (e as Error).message }
+  try { await adminApi.setState(props.code, 'game') }
+  catch (e) { err.value = errMsg(e) }
 }
 
 async function saveTimeout() {
   err.value = ''
   savingTimeout.value = true
   try {
-    await api.adminUpdateSettings(props.code, { questionTimeoutSeconds: Number(timeoutDraft.value) || 30 })
+    await adminApi.updateSettings(props.code, { questionTimeoutSeconds: Number(timeoutDraft.value) || 30 })
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     savingTimeout.value = false
   }
@@ -342,29 +334,29 @@ async function endGame() {
     icon: '⏹',
   })
   if (!ok) return
-  try { await api.adminFinish(props.code) } catch (e) { err.value = (e as Error).message }
+  try { await adminApi.finish(props.code) } catch (e) { err.value = errMsg(e) }
 }
 
 async function activateNext() {
-  try { await api.adminActivate(props.code, null) } catch (e) { err.value = (e as Error).message }
+  try { await adminApi.activate(props.code, null) } catch (e) { err.value = errMsg(e) }
 }
 
 async function reveal() {
-  try { await api.adminReveal(props.code) } catch (e) { err.value = (e as Error).message }
+  try { await adminApi.reveal(props.code) } catch (e) { err.value = errMsg(e) }
 }
 
 async function next() {
   try {
-    const r = await api.adminNext(props.code)
+    const r = await adminApi.next(props.code)
     if (r && r.done) { /* state arrives via ws */ }
-  } catch (e) { err.value = (e as Error).message }
+  } catch (e) { err.value = errMsg(e) }
 }
 
 async function copyImpersonateLink(u: User) {
   err.value = ''
   copyingUser.value = u.id
   try {
-    const r = await api.adminImpersonate(props.code, u.id)
+    const r = await adminApi.impersonate(props.code, u.id)
     const url = `${window.location.origin}/impersonate#token=${encodeURIComponent(r.token)}`
     let ok = false
     if (navigator.clipboard && window.isSecureContext) {
@@ -387,7 +379,7 @@ async function copyImpersonateLink(u: User) {
     copiedUser.value = u.id
     setTimeout(() => { if (copiedUser.value === u.id) copiedUser.value = '' }, 2000)
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     copyingUser.value = ''
   }
@@ -406,9 +398,9 @@ async function removeUser(u: User) {
   err.value = ''
   deletingUser.value = u.id
   try {
-    await api.adminDeleteUser(props.code, u.id)
+    await adminApi.deleteUser(props.code, u.id)
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     deletingUser.value = ''
   }
@@ -427,9 +419,9 @@ async function removeQuestion(q: Question) {
   err.value = ''
   deletingQuestion.value = q.id
   try {
-    await api.adminDeleteQuestion(props.code, q.id)
+    await adminApi.deleteQuestion(props.code, q.id)
   } catch (e) {
-    err.value = (e as Error).message
+    err.value = errMsg(e)
   } finally {
     deletingQuestion.value = ''
   }

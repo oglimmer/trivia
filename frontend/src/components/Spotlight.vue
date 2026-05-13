@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { LeaderboardEntry } from '../types'
+import type { LeaderboardEntry } from '@/types'
 
 const props = withDefaults(defineProps<{
   score?: LeaderboardEntry | null
