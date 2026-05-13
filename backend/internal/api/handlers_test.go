@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -163,7 +164,7 @@ func TestGetGameForJoin404(t *testing.T) {
 
 func TestGetGameForJoinHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
@@ -176,7 +177,7 @@ func TestGetGameForJoinHappy(t *testing.T) {
 
 func TestJoinGameRequiresName(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -189,8 +190,8 @@ func TestJoinGameRequiresName(t *testing.T) {
 
 func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
-	_ = f.SetGameState(nil, g.ID, "game")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	_ = f.SetGameState(context.TODO(), g.ID, "game")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -203,7 +204,7 @@ func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
 
 func TestJoinGameHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -230,8 +231,8 @@ func TestMeRequiresPlayerToken(t *testing.T) {
 
 func TestMeReturnsUserAndGame(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
-	u, _ := f.CreateUser(nil, g.ID, "Alice", "", "tok-1")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", "", "tok-1")
 	w := do(t, s, req{method: "GET", path: "/api/me", playerTo: u.Token})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
@@ -255,7 +256,7 @@ func TestMeReturnsUserAndGame(t *testing.T) {
 
 func TestSetGameStateRejectsBad(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/state",
@@ -269,16 +270,16 @@ func TestSetGameStateRejectsBad(t *testing.T) {
 
 func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	// Put two questions on the game. SortOrder starts at 0 for both via Upsert.
-	_, _ = f.UpsertQuestion(nil, g.ID, "u-a", "q1?", "x", "yesno",
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-a", "q1?", "x", "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
-	_, _ = f.UpsertQuestion(nil, g.ID, "u-b", "q2?", "x", "yesno",
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-b", "q2?", "x", "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"no"`))
 	// Pretend there's a current question, so we can verify it's cleared.
 	qID := "q-stale"
 	g.CurrentQuestionID = &qID
-	_ = f.SetGameState(nil, g.ID, "setup") // no-op, just to ensure state is sane
+	_ = f.SetGameState(context.TODO(), g.ID, "setup") // no-op, just to ensure state is sane
 
 	w := do(t, s, req{
 		method: "POST",
@@ -289,14 +290,14 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d (%s)", w.Code, w.Body.String())
 	}
-	updated, _ := f.GameByID(nil, g.ID)
+	updated, _ := f.GameByID(context.TODO(), g.ID)
 	if updated.State != "game" {
 		t.Errorf("state: want game, got %q", updated.State)
 	}
 	if updated.CurrentQuestionID != nil {
 		t.Errorf("current question should be cleared, got %v", updated.CurrentQuestionID)
 	}
-	qs, _ := f.ListQuestions(nil, g.ID, true)
+	qs, _ := f.ListQuestions(context.TODO(), g.ID, true)
 	if len(qs) != 2 {
 		t.Fatalf("want 2 questions, got %d", len(qs))
 	}
@@ -313,7 +314,7 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 
 func TestRevealRequiresActiveQuestion(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/reveal",
@@ -326,9 +327,9 @@ func TestRevealRequiresActiveQuestion(t *testing.T) {
 
 func TestRevealRescoresNumberAnswers(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	// One number question, three players with varying closeness.
-	q, _ := f.UpsertQuestion(nil, g.ID, "author", "How many?", "x", "number",
+	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "How many?", "x", "number",
 		json.RawMessage(`[]`), json.RawMessage(`100`))
 	for _, p := range []struct {
 		uid    string
@@ -339,9 +340,9 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 		{"mid", `108`, 1500},
 		{"far", `130`, 2000},
 	} {
-		_ = f.SaveAnswer(nil, q.ID, p.uid, json.RawMessage(p.answer), p.ms, false, 0)
+		_ = f.SaveAnswer(context.TODO(), q.ID, p.uid, json.RawMessage(p.answer), p.ms, false, 0)
 	}
-	_ = f.ActivateQuestion(nil, g.ID, q.ID)
+	_ = f.ActivateQuestion(context.TODO(), g.ID, q.ID)
 
 	w := do(t, s, req{
 		method: "POST",
@@ -351,11 +352,11 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d (%s)", w.Code, w.Body.String())
 	}
-	updated, _ := f.GameByID(nil, g.ID)
+	updated, _ := f.GameByID(context.TODO(), g.ID)
 	if updated.QuestionState != "revealed" {
 		t.Errorf("question state: want revealed, got %q", updated.QuestionState)
 	}
-	ans, _ := f.AnswersForQuestion(nil, q.ID)
+	ans, _ := f.AnswersForQuestion(context.TODO(), q.ID)
 	byUser := map[string]db.Answer{}
 	for _, a := range ans {
 		byUser[a.UserID] = a
@@ -368,11 +369,11 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 
 func TestNextQuestionFinishesAtEnd(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
-	q, _ := f.UpsertQuestion(nil, g.ID, "author", "only", "x", "yesno",
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "only", "x", "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
-	_ = f.SetGameState(nil, g.ID, "game")
-	_ = f.ActivateQuestion(nil, g.ID, q.ID)
+	_ = f.SetGameState(context.TODO(), g.ID, "game")
+	_ = f.ActivateQuestion(context.TODO(), g.ID, q.ID)
 
 	w := do(t, s, req{
 		method: "POST",
@@ -386,7 +387,7 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 	if out["done"] != true {
 		t.Errorf("want done=true, got %v", out)
 	}
-	updated, _ := f.GameByID(nil, g.ID)
+	updated, _ := f.GameByID(context.TODO(), g.ID)
 	if updated.State != "finished" {
 		t.Errorf("game should be finished, got state %q", updated.State)
 	}
@@ -396,7 +397,7 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 
 func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(nil, "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
 	// Force lifecycle state populated.
 	s.lockFor(g.ID)                                // populate gameLocks
 	s.scheduleAutoClose(g.ID, "q-x", 24*time.Hour) // populate autoClose
