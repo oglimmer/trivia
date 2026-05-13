@@ -1,0 +1,56 @@
+# Binary or non-YAML files that text/structure hooks must skip.
+exclude: |
+  (?x)^(
+    .*\.cpt|
+    helm/.*\.yaml|
+    frontend/package-lock\.json
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+      - id: mixed-line-ending
+
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -w -s
+        language: system
+        types: [go]
+        pass_filenames: true
+
+      - id: go-vet
+        name: go vet
+        entry: bash -c 'cd backend && go vet ./...'
+        language: system
+        files: ^backend/.*\.go$
+        pass_filenames: false
+
+      - id: go-build
+        name: go build
+        entry: bash -c 'cd backend && go build ./...'
+        language: system
+        files: ^backend/.*\.go$
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint
+        entry: ./frontend/node_modules/.bin/eslint --max-warnings=0
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx|vue|mts)$
+        pass_filenames: true
+
+      - id: vue-tsc
+        name: vue-tsc typecheck
+        entry: bash -c 'cd frontend && npx vue-tsc --noEmit'
+        language: system
+        files: ^frontend/(src/.*\.(ts|tsx|vue|mts)|tsconfig.*\.json)$
+        pass_filenames: false
