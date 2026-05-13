@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -153,8 +154,8 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestRespo
 	}
 	text := ar.Content[0].Text
 	// Be permissive: extract first {...} block in case the model wrapped output.
-	start := bytesIndex(text, '{')
-	end := bytesLastIndex(text, '}')
+	start := strings.IndexByte(text, '{')
+	end := strings.LastIndexByte(text, '}')
 	if start < 0 || end <= start {
 		return nil, fmt.Errorf("could not parse JSON from: %s", text)
 	}
@@ -165,43 +166,17 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestRespo
 	return out, nil
 }
 
+// splitDataURI separates a data: URI's media type from its base64 payload.
+// A plain base64 string passes through with the default JPEG media type.
 func splitDataURI(s string) (mediaType, data string) {
 	mediaType = "image/jpeg"
-	if len(s) > 5 && s[:5] == "data:" {
-		semi := -1
-		comma := -1
-		for i, c := range s {
-			if c == ';' && semi == -1 {
-				semi = i
-			}
-			if c == ',' {
-				comma = i
-				break
-			}
-		}
-		if semi > 0 && comma > semi {
-			mediaType = s[5:semi]
-			data = s[comma+1:]
-			return
-		}
+	if !strings.HasPrefix(s, "data:") {
+		return mediaType, s
 	}
-	return mediaType, s
-}
-
-func bytesIndex(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
+	semi := strings.IndexByte(s, ';')
+	comma := strings.IndexByte(s, ',')
+	if semi <= 5 || comma <= semi {
+		return mediaType, s
 	}
-	return -1
-}
-
-func bytesLastIndex(s string, c byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
+	return s[5:semi], s[comma+1:]
 }

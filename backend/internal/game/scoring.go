@@ -11,11 +11,12 @@ const AnswerWindowMs = 30_000
 
 // basePoints derives a difficulty floor from the answer type and option count.
 // Reasoning: more options/harder answer space -> more points.
-//   yes/no                 100
-//   choice with 2 options  100
-//   choice with 3 options  200
-//   choice with 4 options  300
-//   number                 300 (open-ended)
+//
+//	yes/no                 100
+//	choice with 2 options  100
+//	choice with 3 options  200
+//	choice with 4 options  300
+//	number                 300 (open-ended)
 func basePoints(answerType string, optionCount int) int {
 	switch answerType {
 	case "yesno":
