@@ -233,6 +233,15 @@ func (d *DB) UserByID(ctx context.Context, id string) (*User, error) {
 	return u, err
 }
 
+func (d *DB) UserTokenByID(ctx context.Context, id string) (string, error) {
+	var tok string
+	err := d.Pool.QueryRow(ctx, `SELECT token FROM users WHERE id=$1`, id).Scan(&tok)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return tok, err
+}
+
 func (d *DB) ListUsers(ctx context.Context, gameID string) ([]User, error) {
 	rows, err := d.Pool.Query(ctx, `
 		SELECT id, game_id, name, photo_b64, '', created_at

@@ -49,5 +49,6 @@ export const api = {
   adminNext: (code) => req('POST', `/admin/games/${code}/next`),
   adminFinish: (code) => req('POST', `/admin/games/${code}/finish`),
   adminDeleteUser: (code, userId) => req('DELETE', `/admin/games/${code}/users/${userId}`),
+  adminImpersonate: (code, userId) => req('GET', `/admin/games/${code}/users/${userId}/impersonate`),
   adminDeleteQuestion: (code, questionId) => req('DELETE', `/admin/games/${code}/questions/${questionId}`),
 }

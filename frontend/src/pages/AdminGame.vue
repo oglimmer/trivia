@@ -57,8 +57,9 @@
                   · by {{ userName(q.userId) }}
                 </div>
               </div>
-              <button class="btn-danger btn-sm" :disabled="deletingQuestion === q.id" @click="removeQuestion(q)">
-                {{ deletingQuestion === q.id ? '…' : 'Delete' }}
+              <button class="btn-danger btn-sm btn-icon-sm" :disabled="deletingQuestion === q.id" @click="removeQuestion(q)" :aria-label="`Delete submission by ${userName(q.userId)}`" :title="`Delete submission`">
+                <span v-if="deletingQuestion === q.id">…</span>
+                <span v-else aria-hidden="true">🗑</span>
               </button>
             </div>
             <details style="margin-top: 10px;">
@@ -96,8 +97,14 @@
             <span class="pts" :style="`color: ${hasQuestion(u.id) ? 'var(--mint)' : 'var(--muted)'};`">
               {{ hasQuestion(u.id) ? '✓ ready' : 'thinking…' }}
             </span>
-            <button class="btn-danger btn-sm" :disabled="deletingUser === u.id" @click="removeUser(u)" style="margin-left: auto;">
-              {{ deletingUser === u.id ? '…' : 'Remove' }}
+            <button class="btn-ghost btn-sm btn-icon-sm" :disabled="copyingUser === u.id" @click="copyImpersonateLink(u)" style="margin-left: auto;" :aria-label="`Copy login link for ${u.name}`" :title="`Copy a link that signs you in as ${u.name}`">
+              <span v-if="copyingUser === u.id">…</span>
+              <span v-else-if="copiedUser === u.id" aria-hidden="true">✓</span>
+              <span v-else aria-hidden="true">🔗</span>
+            </button>
+            <button class="btn-danger btn-sm btn-icon-sm" :disabled="deletingUser === u.id" @click="removeUser(u)" :aria-label="`Remove ${u.name}`" title="Remove player">
+              <span v-if="deletingUser === u.id">…</span>
+              <span v-else aria-hidden="true">🗑</span>
             </button>
           </li>
           <li v-if="!users.length" class="muted center" style="justify-content: center;">No players yet.</li>
@@ -215,6 +222,8 @@ const timeoutDraft = ref(30)
 const savingTimeout = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
+const copyingUser = ref('')
+const copiedUser = ref('')
 let tick = null
 let stopListening = null
 const letters = ['A', 'B', 'C', 'D']
@@ -349,6 +358,39 @@ async function next() {
   } catch (e) { err.value = e.message }
 }
 
+async function copyImpersonateLink(u) {
+  err.value = ''
+  copyingUser.value = u.id
+  try {
+    const r = await api.adminImpersonate(props.code, u.id)
+    const url = `${window.location.origin}/impersonate#token=${encodeURIComponent(r.token)}`
+    let ok = false
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(url); ok = true } catch {}
+    }
+    if (!ok) {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try { ok = document.execCommand('copy') } catch {}
+      document.body.removeChild(ta)
+    }
+    if (!ok) {
+      err.value = 'Could not copy. Link: ' + url
+      return
+    }
+    copiedUser.value = u.id
+    setTimeout(() => { if (copiedUser.value === u.id) copiedUser.value = '' }, 2000)
+  } catch (e) {
+    err.value = e.message
+  } finally {
+    copyingUser.value = ''
+  }
+}
+
 async function removeUser(u) {
   const ok = await confirm({
     title: `Remove ${u.name}?`,
@@ -393,6 +435,19 @@ async function removeQuestion(q) {
 </script>
 
 <style scoped>
+.btn-icon-sm {
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .state-pill {
   display: inline-block;
   padding: 4px 12px;

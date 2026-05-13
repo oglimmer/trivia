@@ -7,6 +7,7 @@ import Results from './pages/Results.vue'
 import AdminLogin from './pages/AdminLogin.vue'
 import AdminGames from './pages/AdminGames.vue'
 import AdminGame from './pages/AdminGame.vue'
+import Impersonate from './pages/Impersonate.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -19,6 +20,7 @@ const router = createRouter({
     { path: '/admin', component: AdminLogin },
     { path: '/admin/games', component: AdminGames },
     { path: '/admin/games/:code', component: AdminGame, props: true },
+    { path: '/impersonate', component: Impersonate },
   ],
 })
 

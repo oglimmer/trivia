@@ -152,6 +152,7 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/admin/games/{code}/next", s.nextQuestion)
 			r.Post("/admin/games/{code}/finish", s.finishGame)
 			r.Delete("/admin/games/{code}/users/{userId}", s.deleteUser)
+			r.Get("/admin/games/{code}/users/{userId}/impersonate", s.impersonateUser)
 			r.Delete("/admin/games/{code}/questions/{questionId}", s.deleteQuestion)
 		})
 
@@ -355,6 +356,33 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	s.broadcastQuestionsAdmin(r.Context(), g.ID)
 	s.broadcastPresence(g.ID)
 	w.WriteHeader(204)
+}
+
+// impersonateUser returns the player's token so an admin can construct a
+// login link that signs them in as that player.
+func (s *Server) impersonateUser(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	userID := chi.URLParam(r, "userId")
+	g, err := s.DB.GameByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no game")
+		return
+	}
+	u, err := s.DB.UserByID(r.Context(), userID)
+	if err != nil || u.GameID != g.ID {
+		writeErr(w, http.StatusNotFound, "no user")
+		return
+	}
+	tok, err := s.DB.UserTokenByID(r.Context(), userID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"token":  tok,
+		"userId": u.ID,
+		"code":   g.Code,
+	})
 }
 
 func (s *Server) deleteQuestion(w http.ResponseWriter, r *http.Request) {
