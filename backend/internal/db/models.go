@@ -191,6 +191,23 @@ func (d *DB) UserByToken(ctx context.Context, token string) (*User, error) {
 	return u, err
 }
 
+func (d *DB) DeleteUser(ctx context.Context, id string) error {
+	_, err := d.Pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
+	return err
+}
+
+func (d *DB) UserByID(ctx context.Context, id string) (*User, error) {
+	u := &User{}
+	err := d.Pool.QueryRow(ctx, `
+		SELECT id, game_id, name, photo_b64, '', created_at
+		FROM users WHERE id=$1
+	`, id).Scan(&u.ID, &u.GameID, &u.Name, &u.PhotoB64, &u.Token, &u.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return u, err
+}
+
 func (d *DB) ListUsers(ctx context.Context, gameID string) ([]User, error) {
 	rows, err := d.Pool.Query(ctx, `
 		SELECT id, game_id, name, photo_b64, '', created_at
@@ -264,6 +281,11 @@ func (d *DB) QuestionByID(ctx context.Context, id string) (*Question, error) {
 		return nil, ErrNotFound
 	}
 	return q, err
+}
+
+func (d *DB) DeleteQuestion(ctx context.Context, id string) error {
+	_, err := d.Pool.Exec(ctx, `DELETE FROM questions WHERE id=$1`, id)
+	return err
 }
 
 func (d *DB) RandomizeQuestionOrder(ctx context.Context, gameID string) error {

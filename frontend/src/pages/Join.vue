@@ -1,22 +1,63 @@
 <template>
   <main class="stack-lg">
-    <div class="card card--yellow stack">
-      <span class="tag tag--pink" style="align-self: flex-start;">Game · {{ code }}</span>
-      <h1>Who's playing?</h1>
-      <p class="muted">Your name &amp; photo will pop up on the leaderboard.</p>
-    </div>
+    <!-- Hero: explicit profile-setup framing -->
+    <section class="profile-hero">
+      <div class="profile-hero__sparkles" aria-hidden="true">
+        <span class="profile-hero__sparkle s1">✦</span>
+        <span class="profile-hero__sparkle s2">★</span>
+        <span class="profile-hero__sparkle s3">✺</span>
+      </div>
+      <div class="profile-hero__eyebrow">Step 1 · Your profile</div>
+      <h1 class="profile-hero__title">Make your player card</h1>
+      <p class="profile-hero__sub">
+        Pick a name &amp; selfie — this is <em>you</em> on the leaderboard.
+        Your trivia question comes next.
+      </p>
+    </section>
 
-    <div class="card stack">
-      <label for="player-name">Your name</label>
-      <input id="player-name" v-model="name" placeholder="e.g. Sam" maxlength="40" />
+    <!-- Live preview of the player card the user is building -->
+    <section class="player-card" aria-label="Live preview of your player card">
+      <div class="player-card__photo">
+        <img v-if="photo" :src="photo" alt="" />
+        <span v-else class="player-card__placeholder" aria-hidden="true">🙂</span>
+      </div>
+      <div :class="['player-card__name', !name.trim() && 'is-empty']">
+        {{ name.trim() || 'Your name' }}
+      </div>
+      <div class="player-card__game">
+        <span>Game</span>
+        <span class="player-card__game-code">{{ code }}</span>
+      </div>
+    </section>
 
-      <label>Your photo</label>
-      <PhotoPicker v-model="photo" />
+    <!-- Profile inputs -->
+    <section class="card card--mint stack">
+      <label for="player-name">Display name</label>
+      <input
+        id="player-name"
+        v-model="name"
+        placeholder="e.g. Sam"
+        maxlength="40"
+        autocomplete="given-name"
+      />
 
-      <button class="btn-primary btn-lg btn-block" :disabled="!canSubmit || loading" @click="submit">
-        {{ loading ? 'Joining…' : "Let's go →" }}
+      <label>Your selfie</label>
+      <PhotoPicker v-model="photo" no-frame allow-random />
+
+      <button
+        class="btn-primary btn-lg btn-block"
+        :disabled="!canSubmit || loading"
+        @click="submit"
+      >
+        {{ loading ? 'Saving…' : 'Save my card →' }}
       </button>
       <div v-if="err" class="error">{{ err }}</div>
+    </section>
+
+    <!-- What's next: makes the two-step flow explicit -->
+    <div class="next-hint">
+      <span class="next-hint__num">2</span>
+      <span><strong>Next up:</strong> write a trivia question for the game.</span>
     </div>
   </main>
 </template>

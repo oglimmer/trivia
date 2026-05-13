@@ -72,6 +72,8 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/admin/games/{code}/reveal", s.revealQuestion)
 			r.Post("/admin/games/{code}/next", s.nextQuestion)
 			r.Post("/admin/games/{code}/finish", s.finishGame)
+			r.Delete("/admin/games/{code}/users/{userId}", s.deleteUser)
+			r.Delete("/admin/games/{code}/questions/{questionId}", s.deleteQuestion)
 		})
 
 		// Player-facing endpoints.
@@ -225,6 +227,58 @@ func (s *Server) deleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	userID := chi.URLParam(r, "userId")
+	g, err := s.DB.GameByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no game")
+		return
+	}
+	if g.State != "setup" {
+		writeErr(w, http.StatusBadRequest, "players can only be removed in setup")
+		return
+	}
+	u, err := s.DB.UserByID(r.Context(), userID)
+	if err != nil || u.GameID != g.ID {
+		writeErr(w, http.StatusNotFound, "no user")
+		return
+	}
+	if err := s.DB.DeleteUser(r.Context(), userID); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.broadcastUsers(r.Context(), g.ID)
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
+	s.broadcastPresence(g.ID)
+	w.WriteHeader(204)
+}
+
+func (s *Server) deleteQuestion(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	qID := chi.URLParam(r, "questionId")
+	g, err := s.DB.GameByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no game")
+		return
+	}
+	if g.State != "setup" {
+		writeErr(w, http.StatusBadRequest, "questions can only be removed in setup")
+		return
+	}
+	q, err := s.DB.QuestionByID(r.Context(), qID)
+	if err != nil || q.GameID != g.ID {
+		writeErr(w, http.StatusNotFound, "no question")
+		return
+	}
+	if err := s.DB.DeleteQuestion(r.Context(), qID); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
+	w.WriteHeader(204)
 }
 
 func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {

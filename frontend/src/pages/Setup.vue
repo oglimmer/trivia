@@ -11,12 +11,10 @@
       <!-- Step 1: Photo -->
       <div v-else-if="step === 'photo'" key="photo" class="card stack">
         <Stepper :current="1" :photo="photo" />
-        <div class="row between">
-          <h1 style="margin: 0;">Snap a photo</h1>
-          <span class="tag tag--yellow">1 of 3</span>
-        </div>
-        <p class="muted" style="margin-top: -4px;">
-          Start with a photo of something tricky to identify. You'll write the question next.
+        <span class="tag tag--yellow" style="align-self: flex-start;">Step 1 of 3</span>
+        <h1 style="margin: 16px 0 0;">Set up your question for the quiz</h1>
+        <p class="muted" style="margin-top: 16px;">
+          Start with a photo of whatever your question is about.
         </p>
 
         <PhotoPicker v-model="photo" />
@@ -30,11 +28,9 @@
       <!-- Step 2: AI or manual -->
       <div v-else-if="step === 'ai-choice'" key="ai-choice" class="card stack">
         <Stepper :current="2" :photo="photo" />
-        <div class="row between">
-          <h1 style="margin: 0;">How should we make it?</h1>
-          <span class="tag tag--yellow">2 of 3</span>
-        </div>
-        <p class="muted" style="margin-top: -4px;">
+        <span class="tag tag--yellow" style="align-self: flex-start;">Step 2 of 3</span>
+        <h1 style="margin: 16px 0 0;">How should we make it?</h1>
+        <p class="muted" style="margin-top: 16px;">
           Let AI suggest a question for your photo, or write your own.
         </p>
 
@@ -66,11 +62,9 @@
       <!-- Step 3: Editor -->
       <div v-else key="editor" class="card stack">
         <Stepper :current="3" :photo="photo" />
-        <div class="row between">
-          <h1 style="margin: 0;">Your question</h1>
-          <span class="tag tag--yellow">3 of 3</span>
-        </div>
-        <p class="muted" style="margin-top: -4px;">Write the question and set the right answer.</p>
+        <span class="tag tag--yellow" style="align-self: flex-start;">Step 3 of 3</span>
+        <h1 style="margin: 16px 0 0;">Your question</h1>
+        <p class="muted" style="margin-top: 16px;">Write the question and set the right answer.</p>
 
         <div class="photo-summary">
           <img class="photo-thumb" :src="photo" alt="" />

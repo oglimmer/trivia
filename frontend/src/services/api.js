@@ -47,4 +47,6 @@ export const api = {
   adminReveal: (code) => req('POST', `/admin/games/${code}/reveal`),
   adminNext: (code) => req('POST', `/admin/games/${code}/next`),
   adminFinish: (code) => req('POST', `/admin/games/${code}/finish`),
+  adminDeleteUser: (code, userId) => req('DELETE', `/admin/games/${code}/users/${userId}`),
+  adminDeleteQuestion: (code, questionId) => req('DELETE', `/admin/games/${code}/questions/${questionId}`),
 }

@@ -27,7 +27,7 @@
         </div>
         <div class="stack">
           <div v-for="q in questions" :key="q.id" class="card card--flat" style="background: var(--paper); border: 2px solid var(--ink); padding: 14px;">
-            <div class="row" style="gap: 12px;">
+            <div class="row" style="gap: 12px; align-items: flex-start;">
               <img class="avatar" :src="q.photoB64" alt="" />
               <div style="flex: 1; min-width: 0;">
                 <div class="bold">{{ q.text }}</div>
@@ -36,6 +36,9 @@
                   · by {{ userName(q.userId) }}
                 </div>
               </div>
+              <button class="btn-danger btn-sm" :disabled="deletingQuestion === q.id" @click="removeQuestion(q)">
+                {{ deletingQuestion === q.id ? '…' : 'Delete' }}
+              </button>
             </div>
             <details style="margin-top: 10px;">
               <summary class="bold" style="cursor: pointer;">Reveal answer</summary>
@@ -72,6 +75,9 @@
             <span class="pts" :style="`color: ${hasQuestion(u.id) ? 'var(--mint)' : 'var(--muted)'};`">
               {{ hasQuestion(u.id) ? '✓ ready' : 'thinking…' }}
             </span>
+            <button class="btn-danger btn-sm" :disabled="deletingUser === u.id" @click="removeUser(u)" style="margin-left: auto;">
+              {{ deletingUser === u.id ? '…' : 'Remove' }}
+            </button>
           </li>
           <li v-if="!users.length" class="muted center" style="justify-content: center;">No players yet.</li>
         </ul>
@@ -184,6 +190,8 @@ const playerAnswered = ref(new Set())
 const online = ref(new Set())
 const err = ref('')
 const elapsed = ref(0)
+const deletingUser = ref('')
+const deletingQuestion = ref('')
 let tick = null
 let stopListening = null
 const letters = ['A', 'B', 'C', 'D']
@@ -291,6 +299,48 @@ async function next() {
     const r = await api.adminNext(props.code)
     if (r && r.done) { /* state arrives via ws */ }
   } catch (e) { err.value = e.message }
+}
+
+async function removeUser(u) {
+  const ok = await confirm({
+    title: `Remove ${u.name}?`,
+    message: 'Their submission and any answers will also be deleted. This cannot be undone.',
+    confirmLabel: 'Remove',
+    cancelLabel: 'Keep',
+    tone: 'danger',
+    icon: '🗑',
+  })
+  if (!ok) return
+  err.value = ''
+  deletingUser.value = u.id
+  try {
+    await api.adminDeleteUser(props.code, u.id)
+  } catch (e) {
+    err.value = e.message
+  } finally {
+    deletingUser.value = ''
+  }
+}
+
+async function removeQuestion(q) {
+  const ok = await confirm({
+    title: 'Delete this submission?',
+    message: `"${q.text}" — by ${userName(q.userId)}. The player stays in the game and can submit a new question.`,
+    confirmLabel: 'Delete',
+    cancelLabel: 'Keep',
+    tone: 'danger',
+    icon: '🗑',
+  })
+  if (!ok) return
+  err.value = ''
+  deletingQuestion.value = q.id
+  try {
+    await api.adminDeleteQuestion(props.code, q.id)
+  } catch (e) {
+    err.value = e.message
+  } finally {
+    deletingQuestion.value = ''
+  }
 }
 </script>
 
