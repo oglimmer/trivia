@@ -17,13 +17,19 @@
         </span>
 
         <template v-if="store.me">
-          <div class="who" :title="store.me.name">
+          <button
+            type="button"
+            class="who"
+            :title="`Edit profile · ${store.me.name}`"
+            aria-label="Edit profile"
+            @click="editing = true"
+          >
             <img v-if="store.me.photoB64" class="avatar avatar-sm" :src="store.me.photoB64" alt="" />
             <div class="who__meta">
               <span class="who__name">{{ store.me.name }}</span>
               <span v-if="store.game" class="who__code">{{ store.game.code }}</span>
             </div>
-          </div>
+          </button>
           <button class="btn-ghost btn-sm" @click="leave">Leave</button>
         </template>
 
@@ -44,17 +50,21 @@
   <footer class="foot">made for game night ★ no big tech, just friends</footer>
 
   <ConfirmDialog />
+  <ProfileDialog :open="editing" @close="editing = false" />
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useGameStore } from './stores/game.js'
 import { disconnect } from './services/ws.js'
 import { confirm } from './services/dialog.js'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import ProfileDialog from './components/ProfileDialog.vue'
 
 const store = useGameStore()
 const router = useRouter()
+const editing = ref(false)
 
 async function leave() {
   const ok = await confirm({

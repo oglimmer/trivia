@@ -353,15 +353,21 @@ label {
 
 /* Who chip in header */
 .who {
-  display: inline-flex; align-items: center; gap: 9px;
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 9px;
   padding: 4px 10px 4px 4px;
   background: var(--paper);
+  color: var(--ink);
   border: 2px solid var(--ink);
   border-radius: 999px;
   box-shadow: 2px 2px 0 var(--ink);
   min-width: 0;
   max-width: 200px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+.who:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+.who:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
 .who__meta { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .who__name {
   font-weight: 800;
