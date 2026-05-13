@@ -37,6 +37,7 @@ func main() {
 
 	hub := ws.NewHub()
 	srv := api.New(d, hub, ai.New())
+	srv.ResumeAutoCloseTimers(ctx)
 
 	corsMW := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},

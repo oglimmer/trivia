@@ -32,14 +32,92 @@ type Server struct {
 	// gameLocks serializes admin transitions per game.
 	mu        sync.Mutex
 	gameLocks map[string]*sync.Mutex
+
+	// autoClose holds the pending question-timeout timer per game, so we can
+	// cancel it if the admin reveals/advances first.
+	autoCloseMu sync.Mutex
+	autoClose   map[string]*time.Timer
 }
 
 func New(d *db.DB, h *ws.Hub, c *ai.Client) *Server {
-	s := &Server{DB: d, Hub: h, AI: c, gameLocks: map[string]*sync.Mutex{}}
+	s := &Server{
+		DB: d, Hub: h, AI: c,
+		gameLocks: map[string]*sync.Mutex{},
+		autoClose: map[string]*time.Timer{},
+	}
 	h.OnRecv = s.onWSMessage
 	h.OnJoin = s.onWSJoin
 	h.OnLeave = s.onWSLeave
 	return s
+}
+
+// ResumeAutoCloseTimers re-arms pending auto-close timers at startup so a
+// server restart doesn't leave players stuck on an expired question.
+func (s *Server) ResumeAutoCloseTimers(ctx context.Context) {
+	ids, err := s.DB.ActiveQuestionGameIDs(ctx)
+	if err != nil {
+		log.Printf("resume auto-close: %v", err)
+		return
+	}
+	for _, id := range ids {
+		g, err := s.DB.GameByID(ctx, id)
+		if err != nil || g.QuestionStartedAt == nil || g.CurrentQuestionID == nil || g.QuestionTimeoutSeconds <= 0 {
+			continue
+		}
+		deadline := g.QuestionStartedAt.Add(time.Duration(g.QuestionTimeoutSeconds) * time.Second)
+		d := time.Until(deadline)
+		if d < 0 {
+			d = 0
+		}
+		s.scheduleAutoClose(id, *g.CurrentQuestionID, d)
+	}
+}
+
+func (s *Server) scheduleAutoClose(gameID, questionID string, d time.Duration) {
+	s.autoCloseMu.Lock()
+	defer s.autoCloseMu.Unlock()
+	if t, ok := s.autoClose[gameID]; ok {
+		t.Stop()
+	}
+	s.autoClose[gameID] = time.AfterFunc(d, func() {
+		s.autoCloseFire(gameID, questionID)
+	})
+}
+
+func (s *Server) cancelAutoClose(gameID string) {
+	s.autoCloseMu.Lock()
+	defer s.autoCloseMu.Unlock()
+	if t, ok := s.autoClose[gameID]; ok {
+		t.Stop()
+		delete(s.autoClose, gameID)
+	}
+}
+
+// autoCloseFire runs when a question's timer expires. It revealing the
+// question for everyone — same effect as the admin clicking "Reveal".
+func (s *Server) autoCloseFire(gameID, questionID string) {
+	lock := s.lockFor(gameID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	g, err := s.DB.GameByID(ctx, gameID)
+	if err != nil {
+		return
+	}
+	// State may have moved on (admin revealed or advanced) while we were waiting.
+	if g.QuestionState != "active" || g.CurrentQuestionID == nil || *g.CurrentQuestionID != questionID {
+		return
+	}
+	if err := s.rescoreNumberAnswers(ctx, questionID); err != nil {
+		log.Printf("auto-close rescore: %v", err)
+	}
+	if err := s.DB.CloseQuestion(ctx, gameID); err != nil {
+		log.Printf("auto-close: %v", err)
+		return
+	}
+	s.broadcastGameState(ctx, gameID)
 }
 
 func (s *Server) lockFor(gameID string) *sync.Mutex {
@@ -68,6 +146,7 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/admin/games/{code}", s.adminGame)
 			r.Delete("/admin/games/{code}", s.deleteGame)
 			r.Post("/admin/games/{code}/state", s.setGameState)
+			r.Put("/admin/games/{code}/settings", s.updateGameSettings)
 			r.Post("/admin/games/{code}/activate", s.activateQuestion)
 			r.Post("/admin/games/{code}/reveal", s.revealQuestion)
 			r.Post("/admin/games/{code}/next", s.nextQuestion)
@@ -150,8 +229,28 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 // ---------- admin games ----------
 
 type createGameBody struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
+	Code                   string `json:"code"`
+	Name                   string `json:"name"`
+	QuestionTimeoutSeconds int    `json:"questionTimeoutSeconds"`
+}
+
+const (
+	defaultQuestionTimeoutSeconds = 30
+	minQuestionTimeoutSeconds     = 5
+	maxQuestionTimeoutSeconds     = 600
+)
+
+func clampTimeout(v int) int {
+	if v <= 0 {
+		return defaultQuestionTimeoutSeconds
+	}
+	if v < minQuestionTimeoutSeconds {
+		return minQuestionTimeoutSeconds
+	}
+	if v > maxQuestionTimeoutSeconds {
+		return maxQuestionTimeoutSeconds
+	}
+	return v
 }
 
 func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
@@ -164,16 +263,17 @@ func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(gs))
 	for _, g := range gs {
 		out = append(out, map[string]any{
-			"id":                g.ID,
-			"code":              g.Code,
-			"name":              g.Name,
-			"state":             g.State,
-			"currentQuestionId": g.CurrentQuestionID,
-			"questionState":     g.QuestionState,
-			"questionStartedAt": g.QuestionStartedAt,
-			"questionClosedAt":  g.QuestionClosedAt,
-			"createdAt":         g.CreatedAt,
-			"onlineCount":       counts[g.ID],
+			"id":                     g.ID,
+			"code":                   g.Code,
+			"name":                   g.Name,
+			"state":                  g.State,
+			"currentQuestionId":      g.CurrentQuestionID,
+			"questionState":          g.QuestionState,
+			"questionStartedAt":      g.QuestionStartedAt,
+			"questionClosedAt":       g.QuestionClosedAt,
+			"questionTimeoutSeconds": g.QuestionTimeoutSeconds,
+			"createdAt":              g.CreatedAt,
+			"onlineCount":            counts[g.ID],
 		})
 	}
 	writeJSON(w, 200, out)
@@ -189,7 +289,7 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 	if b.Code == "" {
 		b.Code = randomCode()
 	}
-	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name)
+	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -222,6 +322,7 @@ func (s *Server) deleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Hub.Broadcast(g.ID, map[string]any{"type": "gameDeleted"})
+	s.cancelAutoClose(g.ID)
 	if err := s.DB.DeleteGame(r.Context(), g.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -314,6 +415,36 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// No active question survives a state transition.
+	s.cancelAutoClose(g.ID)
+	s.broadcastGameState(r.Context(), g.ID)
+	w.WriteHeader(204)
+}
+
+func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	var b struct {
+		QuestionTimeoutSeconds int `json:"questionTimeoutSeconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad body")
+		return
+	}
+	g, err := s.DB.GameByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no game")
+		return
+	}
+	// Lock the value once players are in the game, so a mid-game change can't
+	// mismatch the timer that is already running.
+	if g.State != "setup" {
+		writeErr(w, http.StatusBadRequest, "timeout can only be changed in setup")
+		return
+	}
+	if err := s.DB.SetQuestionTimeout(r.Context(), g.ID, clampTimeout(b.QuestionTimeoutSeconds)); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
 }
@@ -352,6 +483,11 @@ func (s *Server) activateQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if g.QuestionTimeoutSeconds > 0 {
+		s.scheduleAutoClose(g.ID, qID, time.Duration(g.QuestionTimeoutSeconds)*time.Second)
+	} else {
+		s.cancelAutoClose(g.ID)
+	}
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
 }
@@ -376,6 +512,7 @@ func (s *Server) revealQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.cancelAutoClose(g.ID)
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
 }
@@ -425,6 +562,7 @@ func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.cancelAutoClose(g.ID)
 		s.broadcastGameState(r.Context(), g.ID)
 		writeJSON(w, 200, map[string]any{"done": true})
 		return
@@ -432,6 +570,11 @@ func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {
 	if err := s.DB.ActivateQuestion(r.Context(), g.ID, next.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if g.QuestionTimeoutSeconds > 0 {
+		s.scheduleAutoClose(g.ID, next.ID, time.Duration(g.QuestionTimeoutSeconds)*time.Second)
+	} else {
+		s.cancelAutoClose(g.ID)
 	}
 	s.broadcastGameState(r.Context(), g.ID)
 	writeJSON(w, 200, map[string]any{"done": false, "questionId": next.ID})
@@ -448,6 +591,7 @@ func (s *Server) finishGame(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.cancelAutoClose(g.ID)
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
 }
@@ -847,6 +991,11 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 		return
 	}
 	responseMs := int(time.Since(*g.QuestionStartedAt) / time.Millisecond)
+	// Reject answers that race in after the timeout — protects against a small
+	// window where the auto-close timer has not yet flipped question_state.
+	if g.QuestionTimeoutSeconds > 0 && responseMs > g.QuestionTimeoutSeconds*1000 {
+		return
+	}
 	optCount := game.OptionCount(q.AnswerType, q.Options)
 	ok, pts := game.JudgeAnswer(q.AnswerType, optCount, q.Correct, m.Value, responseMs)
 	if err := s.DB.SaveAnswer(ctx, q.ID, c.UserID, m.Value, responseMs, ok, pts); err != nil {
@@ -871,12 +1020,16 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 	out := map[string]any{
 		"type": "gameState",
 		"data": map[string]any{
-			"code":              g.Code,
-			"name":              g.Name,
-			"state":             g.State,
-			"questionState":     g.QuestionState,
-			"currentQuestionId": g.CurrentQuestionID,
-			"questionStartedAt": g.QuestionStartedAt,
+			"code":                   g.Code,
+			"name":                   g.Name,
+			"state":                  g.State,
+			"questionState":          g.QuestionState,
+			"currentQuestionId":      g.CurrentQuestionID,
+			"questionStartedAt":      g.QuestionStartedAt,
+			"questionTimeoutSeconds": g.QuestionTimeoutSeconds,
+			// serverNow lets clients compute their clock offset vs. the server
+			// so the question countdown stays accurate regardless of local clock skew.
+			"serverNow": time.Now().UTC(),
 		},
 	}
 	data := out["data"].(map[string]any)

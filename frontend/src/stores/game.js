@@ -14,6 +14,9 @@ export const useGameStore = defineStore('game', {
     lastAnswerAck: null,
     wsStarted: false,
     isAdmin: !!localStorage.getItem('adminToken'),
+    // serverClockOffsetMs = serverTime - clientTime, refreshed on each gameState.
+    // Used by the question countdown so a skewed local clock doesn't bias the timer.
+    serverClockOffsetMs: 0,
   }),
   getters: {
     isPlayer: (s) => !!s.me,
@@ -66,6 +69,9 @@ export const useGameStore = defineStore('game', {
         case '_disconnected': this.connected = false; break
         case 'gameState': {
           const d = m.data
+          if (d.serverNow) {
+            this.serverClockOffsetMs = new Date(d.serverNow).getTime() - Date.now()
+          }
           this.game = {
             ...(this.game || {}),
             code: d.code,
@@ -74,6 +80,7 @@ export const useGameStore = defineStore('game', {
             questionState: d.questionState,
             currentQuestionId: d.currentQuestionId,
             questionStartedAt: d.questionStartedAt,
+            questionTimeoutSeconds: d.questionTimeoutSeconds,
           }
           this.question = d.question || null
           if (d.leaderboard) this.leaderboard = d.leaderboard

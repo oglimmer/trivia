@@ -1,0 +1,2 @@
+ALTER TABLE games
+    ADD COLUMN IF NOT EXISTS question_timeout_seconds INT NOT NULL DEFAULT 30;

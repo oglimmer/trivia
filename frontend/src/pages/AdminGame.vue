@@ -15,6 +15,27 @@
         <button v-if="game?.state === 'game'" class="btn-danger" @click="endGame">⏹ End game</button>
         <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
+
+      <div v-if="game?.state === 'setup'" class="row wrap" style="gap: 10px; align-items: center;">
+        <label for="timeout-input" class="bold" style="margin: 0;">Question timeout</label>
+        <input
+          id="timeout-input"
+          v-model.number="timeoutDraft"
+          type="number"
+          min="5"
+          max="600"
+          step="1"
+          style="width: 90px;"
+        />
+        <span class="muted">seconds</span>
+        <button class="btn-ghost btn-sm" :disabled="savingTimeout || timeoutDraft === game?.questionTimeoutSeconds" @click="saveTimeout">
+          {{ savingTimeout ? '…' : 'Save' }}
+        </button>
+      </div>
+      <div v-else-if="game" class="muted" style="font-size: .85rem;">
+        Question timeout: <span class="bold">{{ game.questionTimeoutSeconds || 30 }}s</span>
+      </div>
+
       <div v-if="err" class="error">{{ err }}</div>
     </div>
 
@@ -89,7 +110,7 @@
       <div class="card stack">
         <div class="row between">
           <h2 style="margin: 0;">Now playing</h2>
-          <span class="timer tag tag--pink" v-if="game?.questionState === 'active'">{{ elapsed }}s</span>
+          <span class="timer tag tag--pink" v-if="game?.questionState === 'active'">{{ remaining }}s</span>
           <span class="tag tag--mint" v-else-if="game?.questionState === 'revealed'">Revealed</span>
         </div>
 
@@ -189,12 +210,16 @@ const leaderboard = ref([])
 const playerAnswered = ref(new Set())
 const online = ref(new Set())
 const err = ref('')
-const elapsed = ref(0)
+const remaining = ref(0)
+const timeoutDraft = ref(30)
+const savingTimeout = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
 let tick = null
 let stopListening = null
 const letters = ['A', 'B', 'C', 'D']
+// Server-anchored clock offset (ms). Refreshed on every gameState arrival.
+let serverClockOffsetMs = 0
 
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
 const onlineCount = computed(() => users.value.filter(u => online.value.has(u.id)).length)
@@ -214,6 +239,7 @@ async function load() {
     users.value = r.users || []
     questions.value = r.questions || []
     online.value = new Set(r.online || [])
+    timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
   } catch (e) {
     if (String(e.message).toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin'); return
@@ -223,12 +249,20 @@ async function load() {
 }
 
 function applyState(d) {
+  if (d.serverNow) {
+    serverClockOffsetMs = new Date(d.serverNow).getTime() - Date.now()
+  }
   game.value = {
     ...game.value,
     code: d.code, name: d.name, state: d.state,
     questionState: d.questionState,
     currentQuestionId: d.currentQuestionId,
     questionStartedAt: d.questionStartedAt,
+    questionTimeoutSeconds: d.questionTimeoutSeconds,
+  }
+  // Keep the edit field in sync when we're not actively editing.
+  if (d.state === 'setup' && !savingTimeout.value) {
+    timeoutDraft.value = d.questionTimeoutSeconds || 30
   }
   if (d.question) currentQ.value = d.question
   else if (d.questionState === 'idle') currentQ.value = null
@@ -254,7 +288,9 @@ onMounted(async () => {
   tick = setInterval(() => {
     if (game.value?.questionState === 'active' && game.value?.questionStartedAt) {
       const s = new Date(game.value.questionStartedAt).getTime()
-      elapsed.value = Math.floor((Date.now() - s) / 1000)
+      const total = game.value.questionTimeoutSeconds || 30
+      const elapsed = (Date.now() + serverClockOffsetMs - s) / 1000
+      remaining.value = Math.max(0, Math.ceil(total - elapsed))
     }
   }, 250)
 })
@@ -271,6 +307,18 @@ async function startGame() {
   err.value = ''
   try { await api.adminSetState(props.code, 'game') }
   catch (e) { err.value = e.message }
+}
+
+async function saveTimeout() {
+  err.value = ''
+  savingTimeout.value = true
+  try {
+    await api.adminUpdateSettings(props.code, { questionTimeoutSeconds: Number(timeoutDraft.value) || 30 })
+  } catch (e) {
+    err.value = e.message
+  } finally {
+    savingTimeout.value = false
+  }
 }
 
 async function endGame() {

@@ -43,6 +43,7 @@ export const api = {
   adminGame: (code) => req('GET', `/admin/games/${code}`),
   adminDeleteGame: (code) => req('DELETE', `/admin/games/${code}`),
   adminSetState: (code, state) => req('POST', `/admin/games/${code}/state`, { state }),
+  adminUpdateSettings: (code, settings) => req('PUT', `/admin/games/${code}/settings`, settings),
   adminActivate: (code, questionId) => req('POST', `/admin/games/${code}/activate`, { questionId }),
   adminReveal: (code) => req('POST', `/admin/games/${code}/reveal`),
   adminNext: (code) => req('POST', `/admin/games/${code}/next`),

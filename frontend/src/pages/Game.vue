@@ -192,11 +192,13 @@ function resetTick() {
   numberGuess.value = ''
   if (qState.value !== 'active') return
   const startedAt = store.game && store.game.questionStartedAt ? new Date(store.game.questionStartedAt).getTime() : Date.now()
+  const total = (store.game && store.game.questionTimeoutSeconds) || 30
   const tick = () => {
-    const elapsed = (Date.now() - startedAt) / 1000
-    const left = Math.max(0, 30 - elapsed)
+    // Compare server-anchored times so the countdown isn't biased by a skewed local clock.
+    const elapsed = (Date.now() + store.serverClockOffsetMs - startedAt) / 1000
+    const left = Math.max(0, total - elapsed)
     remaining.value = Math.max(0, Math.ceil(left))
-    ringPct.value = Math.round((left / 30) * 100)
+    ringPct.value = Math.round((left / total) * 100)
   }
   tick()
   tickHandle = setInterval(tick, 200)

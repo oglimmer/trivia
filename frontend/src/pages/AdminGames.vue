@@ -17,6 +17,9 @@
           {{ loading ? '…' : 'Create' }}
         </button>
       </div>
+
+      <label for="game-timeout">Question timeout (seconds)</label>
+      <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" />
       <div v-if="err" class="error">{{ err }}</div>
     </div>
 
@@ -59,6 +62,7 @@ import { confirm } from '../services/dialog.js'
 const games = ref([])
 const code = ref('')
 const name = ref('')
+const timeoutSeconds = ref(30)
 const loading = ref(false)
 const deleting = ref('')
 const err = ref('')
@@ -90,9 +94,14 @@ async function create() {
   err.value = ''
   loading.value = true
   try {
-    const g = await api.adminCreateGame({ code: code.value.trim().toLowerCase(), name: name.value })
+    const g = await api.adminCreateGame({
+      code: code.value.trim().toLowerCase(),
+      name: name.value,
+      questionTimeoutSeconds: Number(timeoutSeconds.value) || 30,
+    })
     code.value = ''
     name.value = ''
+    timeoutSeconds.value = 30
     router.push(`/admin/games/${g.code}`)
   } catch (e) {
     err.value = e.message
