@@ -72,6 +72,13 @@
 
         <!-- Reveal -->
         <template v-if="qState === 'revealed'">
+          <div :class="['verdict', `verdict--${verdict.kind}`]" role="status" aria-live="polite">
+            <div class="verdict__stamp" aria-hidden="true">{{ verdict.emoji }}</div>
+            <div class="verdict__text">
+              <div class="verdict__headline">{{ verdict.headline }}</div>
+              <div class="verdict__sub">{{ verdict.sub }}</div>
+            </div>
+          </div>
           <div v-if="q.answerType === 'yesno'" class="grid-2">
             <div :class="['option-btn', correctYes && 'correct', !correctYes && 'wrong']">
               <span class="option-btn__bullet">Y</span>Yes
@@ -167,6 +174,49 @@ const answersWithUsers = computed(() => {
     name: usersByID.value[a.userId]?.name || '...',
     photo: usersByID.value[a.userId]?.photoB64 || '',
   }))
+})
+
+const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myId.value))
+
+const verdictLines = {
+  correct: [
+    { headline: 'NAILED IT!', sub: 'Big brain energy detected.' },
+    { headline: 'CORRECT!', sub: 'Frame this moment. Tell your mum.' },
+    { headline: 'BOOM!', sub: 'You absolute trivia gremlin.' },
+    { headline: 'CHEF’S KISS', sub: 'Smooth. Effortless. Annoying.' },
+    { headline: 'TOO EASY', sub: 'Were you peeking? You were peeking.' },
+  ],
+  wrong: [
+    { headline: 'NOPE.', sub: 'Confidently incorrect. Respect.' },
+    { headline: 'OOF.', sub: 'That answer ate gravel.' },
+    { headline: 'SWING AND A MISS', sub: 'Points for vibes only.' },
+    { headline: 'NOT QUITE.', sub: 'Geographically near. Factually no.' },
+    { headline: 'YIKES!', sub: 'Even the dog would’ve guessed better.' },
+  ],
+  none: [
+    { headline: 'GHOSTED.', sub: 'You said nothing. Loudly.' },
+    { headline: 'NO ANSWER?', sub: 'Bold strategy. Zero points.' },
+    { headline: 'AWOL', sub: 'We waited. You vibed elsewhere.' },
+  ],
+}
+
+function pickLine(kind, seed) {
+  const lines = verdictLines[kind]
+  let h = 0
+  const s = String(seed || '')
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return lines[h % lines.length]
+}
+
+const verdict = computed(() => {
+  const seed = q.value && q.value.id
+  if (!myAnswer.value) {
+    return { kind: 'none', emoji: '👻', ...pickLine('none', seed) }
+  }
+  if (myAnswer.value.isCorrect) {
+    return { kind: 'correct', emoji: '🎉', ...pickLine('correct', seed) }
+  }
+  return { kind: 'wrong', emoji: '💥', ...pickLine('wrong', seed) }
 })
 
 onMounted(async () => {

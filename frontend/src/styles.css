@@ -446,6 +446,70 @@ label {
   outline-offset: 3px;
 }
 
+/* ---------- Verdict banner (right / wrong / ghosted) ---------- */
+.verdict {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 20px;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  position: relative;
+  overflow: hidden;
+}
+.verdict--correct { background: var(--mint-2);  animation: verdict-pop-left  .35s cubic-bezier(.34,1.56,.64,1) both; }
+.verdict--none    { background: var(--cream-2); animation: verdict-pop-none  .35s cubic-bezier(.34,1.56,.64,1) both; }
+.verdict--wrong   {
+  background: var(--pink-2);
+  animation:
+    verdict-pop-right .35s cubic-bezier(.34,1.56,.64,1) both,
+    verdict-shake     .5s ease-in-out .35s 1;
+}
+.verdict__stamp {
+  font-size: 3rem;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(2px 2px 0 var(--ink));
+  transform: rotate(-8deg);
+}
+.verdict--wrong .verdict__stamp { transform: rotate(8deg); }
+.verdict__text { flex: 1; min-width: 0; }
+.verdict__headline {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+}
+.verdict__sub {
+  margin-top: 6px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+@keyframes verdict-pop-left {
+  0%   { transform: scale(.6) rotate(0deg);    opacity: 0; }
+  100% { transform: scale(1)  rotate(-1.2deg); opacity: 1; }
+}
+@keyframes verdict-pop-right {
+  0%   { transform: scale(.6) rotate(0deg);   opacity: 0; }
+  100% { transform: scale(1)  rotate(1.2deg); opacity: 1; }
+}
+@keyframes verdict-pop-none {
+  0%   { transform: scale(.6) rotate(0deg);   opacity: 0; }
+  100% { transform: scale(1)  rotate(-.6deg); opacity: 1; }
+}
+@keyframes verdict-shake {
+  0%, 100% { transform: rotate(1.2deg) translateX(0); }
+  20% { transform: rotate(1.2deg) translateX(-6px); }
+  40% { transform: rotate(1.2deg) translateX(6px); }
+  60% { transform: rotate(1.2deg) translateX(-4px); }
+  80% { transform: rotate(1.2deg) translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .verdict--correct, .verdict--wrong, .verdict--none { animation: none; }
+}
+
 /* ---------- Big code input ---------- */
 .code-input {
   font-family: var(--font-mono);
