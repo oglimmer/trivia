@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/oglimmer/trivia/backend/internal/db"
@@ -94,5 +95,69 @@ func TestRandomCodeShape(t *testing.T) {
 		if len(c) != 4 {
 			t.Fatalf("expected len 4, got %q", c)
 		}
+	}
+}
+
+func TestRandomCodeAlphabet(t *testing.T) {
+	// The alphabet deliberately omits ambiguous glyphs (0/o, 1/l). Any leak of
+	// those into the generated codes is a regression.
+	const allowed = "abcdefghijkmnpqrstuvwxyz23456789"
+	for i := 0; i < 200; i++ {
+		c := randomCode()
+		for _, ch := range c {
+			if !strings.ContainsRune(allowed, ch) {
+				t.Fatalf("rune %q in %q not in allowed alphabet", ch, c)
+			}
+		}
+	}
+}
+
+func TestClampTimeout(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero -> default", 0, defaultQuestionTimeoutSeconds},
+		{"negative -> default", -5, defaultQuestionTimeoutSeconds},
+		{"below min -> min", minQuestionTimeoutSeconds - 1, minQuestionTimeoutSeconds},
+		{"at min", minQuestionTimeoutSeconds, minQuestionTimeoutSeconds},
+		{"in range passes through", 45, 45},
+		{"at max", maxQuestionTimeoutSeconds, maxQuestionTimeoutSeconds},
+		{"above max -> max", maxQuestionTimeoutSeconds + 100, maxQuestionTimeoutSeconds},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := clampTimeout(c.in); got != c.want {
+				t.Errorf("clampTimeout(%d) = %d, want %d", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRandomTokenLength(t *testing.T) {
+	for _, n := range []int{8, 16, 32} {
+		got := randomToken(n)
+		// Hex-encoded, so length is 2*n.
+		if len(got) != 2*n {
+			t.Errorf("randomToken(%d) len = %d, want %d", n, len(got), 2*n)
+		}
+		for _, ch := range got {
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+				t.Fatalf("randomToken produced non-hex char %q in %q", ch, got)
+			}
+		}
+	}
+}
+
+func TestRandomTokensDiffer(t *testing.T) {
+	// Sanity: 16-byte tokens shouldn't collide across a handful of calls.
+	seen := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		tok := randomToken(16)
+		if seen[tok] {
+			t.Fatalf("collision after %d tokens: %s", i+1, tok)
+		}
+		seen[tok] = true
 	}
 }
