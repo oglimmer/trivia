@@ -53,12 +53,12 @@
   <ProfileDialog :open="editing" @close="editing = false" />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
-import { useGameStore } from './stores/game.js'
-import { disconnect } from './services/ws.js'
-import { confirm } from './services/dialog.js'
+import { useGameStore } from './stores/game'
+import { disconnect } from './services/ws'
+import { confirm } from './services/dialog'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ProfileDialog from './components/ProfileDialog.vue'
 

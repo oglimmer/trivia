@@ -48,15 +48,15 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useGameStore } from '../stores/game.js'
-import { api } from '../services/api.js'
+import { useGameStore } from '../stores/game'
+import { api } from '../services/api'
 import Spotlight from '../components/Spotlight.vue'
 
-const props = defineProps({ code: String })
+const props = defineProps<{ code: string }>()
 const store = useGameStore()
-const phase = ref('three')
+const phase = ref<'three' | 'two' | 'one' | 'ladder'>('three')
 
 const leaderboard = computed(() => store.leaderboard)
 const byRank = computed(() => leaderboard.value)

@@ -36,11 +36,12 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
+import type { GameState } from '../types'
 
 const router = useRouter()
 const code = ref('')
@@ -55,7 +56,7 @@ onMounted(async () => {
   }
 })
 
-function routeForState(c, state) {
+function routeForState(c: string, state: GameState) {
   if (state === 'setup') router.replace(`/g/${c}/setup`)
   else if (state === 'game') router.replace(`/g/${c}/play`)
   else if (state === 'finished') router.replace(`/g/${c}/results`)
@@ -70,7 +71,7 @@ async function join() {
     if (g.state === 'setup') router.push(`/g/${c}/join`)
     else router.push(`/g/${c}/play`)
   } catch (e) {
-    err.value = e.message || 'No game with that code'
+    err.value = (e as Error).message || 'No game with that code'
   } finally {
     loading.value = false
   }

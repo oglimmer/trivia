@@ -177,42 +177,47 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '../components/PhotoPicker.vue'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
+import type { AnswerType, Question } from '../types'
 
-const props = defineProps({ code: String })
+const props = defineProps<{ code: string }>()
 const router = useRouter()
 const store = useGameStore()
 
 const photo = ref('')
 const text = ref('')
-const answerType = ref('yesno')
-const correct = ref('yes')           // yesno
-const options = ref(['', ''])        // choice
+const answerType = ref<AnswerType>('yesno')
+const correct = ref<'yes' | 'no'>('yes')
+const options = ref<string[]>(['', ''])
 const correctIdx = ref(0)
-const correctNumber = ref(0)
+const correctNumber = ref<number | ''>(0)
 const loading = ref(false)
 const saved = ref(false)
 const editing = ref(false)
 const err = ref('')
 const aiBusy = ref(false)
 const aiConfirm = ref(false)
-const step = ref('photo')            // 'photo' | 'ai-choice' | 'editor'
+const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
 
+interface StepperProps { current: number; photo: string }
 const Stepper = {
-  props: ['current', 'photo'],
-  setup(p) {
+  props: {
+    current: { type: Number, required: true },
+    photo: { type: String, required: true },
+  },
+  setup(p: StepperProps) {
     return () => {
       const steps = [
         { n: 1, label: 'Photo' },
         { n: 2, label: 'AI?' },
         { n: 3, label: 'Details' },
       ]
-      const nodes = []
+      const nodes: ReturnType<typeof h>[] = []
       steps.forEach((s, i) => {
         const state = s.n < p.current ? 'done' : s.n === p.current ? 'active' : ''
         nodes.push(h('div', { class: ['stepper__step', state] }, [
@@ -268,7 +273,7 @@ onMounted(async () => {
 
   try {
     const qs = await api.listQuestions(props.code)
-    const mine = qs.find(q => q.userId === store.me.id)
+    const mine = qs.find(q => q.userId === store.me?.id)
     if (mine) hydrateFromQuestion(mine)
   } catch {}
 })
@@ -278,7 +283,7 @@ watch(() => store.game && store.game.state, (s) => {
   if (s === 'finished') router.replace(`/g/${props.code}/results`)
 })
 
-function hydrateFromQuestion(q) {
+function hydrateFromQuestion(q: Question) {
   text.value = q.text
   photo.value = q.photoB64
   answerType.value = q.answerType
@@ -288,7 +293,7 @@ function hydrateFromQuestion(q) {
   saved.value = true
 }
 
-function removeOption(i) {
+function removeOption(i: number) {
   options.value.splice(i, 1)
   if (correctIdx.value >= options.value.length) correctIdx.value = 0
 }
@@ -325,7 +330,7 @@ async function useAIPath() {
     }
     step.value = 'editor'
   } catch (e) {
-    err.value = 'AI: ' + (e.message || 'failed')
+    err.value = 'AI: ' + ((e as Error).message || 'failed')
   } finally {
     aiBusy.value = false
   }
@@ -335,7 +340,13 @@ async function save() {
   err.value = ''
   loading.value = true
   try {
-    const body = {
+    const body: {
+      text: string
+      photoB64: string
+      answerType: AnswerType
+      options: string[]
+      correct?: string | number
+    } = {
       text: text.value.trim(),
       photoB64: photo.value,
       answerType: answerType.value,
@@ -349,7 +360,7 @@ async function save() {
     saved.value = true
     editing.value = false
   } catch (e) {
-    err.value = e.message || 'Could not save'
+    err.value = (e as Error).message || 'Could not save'
   } finally {
     loading.value = false
   }
@@ -377,7 +388,7 @@ async function confirmAI() {
       correctIdx.value = Number(r.correct) || 0
     }
   } catch (e) {
-    err.value = 'AI: ' + (e.message || 'failed')
+    err.value = 'AI: ' + ((e as Error).message || 'failed')
   } finally {
     aiBusy.value = false
   }

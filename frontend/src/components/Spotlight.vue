@@ -13,22 +13,27 @@
   <div v-else class="muted center">—</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
+import type { LeaderboardEntry } from '../types'
 
-const props = defineProps({
-  score: { type: Object, default: null },
-  rank: { type: [String, Number], required: true },
-  color: { type: String, default: 'gold' },
-  big: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  score?: LeaderboardEntry | null
+  rank: string | number
+  color?: string
+  big?: boolean
+}>(), {
+  score: null,
+  color: 'gold',
+  big: false,
 })
 
 const rankLabel = computed(() => {
-  const map = { '1': '🥇 First', '2': '🥈 Second', '3': '🥉 Third' }
+  const map: Record<string, string> = { '1': '🥇 First', '2': '🥈 Second', '3': '🥉 Third' }
   return map[String(props.rank)] || `#${props.rank}`
 })
 
-function confettiStyle(n) {
+function confettiStyle(n: number) {
   const left = (n * 17) % 100
   const delay = (n * 0.13) % 2
   const dur = 2.2 + (n % 5) * 0.3

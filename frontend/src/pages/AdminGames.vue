@@ -32,7 +32,7 @@
           <div class="bold">{{ g.name || '(untitled)' }}</div>
           <div class="row" style="gap: 8px; font-size: .85rem; align-items: center;">
             <span :class="['state-pill', `state-${g.state}`]">{{ g.state }}</span>
-            <span class="presence-pill" :class="{ 'presence-pill--on': g.onlineCount > 0 }">
+            <span class="presence-pill" :class="{ 'presence-pill--on': (g.onlineCount || 0) > 0 }">
               <span class="presence-dot"></span>
               {{ g.onlineCount || 0 }} online
             </span>
@@ -52,14 +52,15 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
-import { confirm } from '../services/dialog.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
+import { confirm } from '../services/dialog'
+import type { AdminGamesEntry } from '../types'
 
-const games = ref([])
+const games = ref<AdminGamesEntry[]>([])
 const code = ref('')
 const name = ref('')
 const timeoutSeconds = ref(30)
@@ -68,7 +69,7 @@ const deleting = ref('')
 const err = ref('')
 const router = useRouter()
 const store = useGameStore()
-let presencePoll = null
+let presencePoll: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
   if (!localStorage.getItem('adminToken')) { router.replace('/admin'); return }
@@ -84,9 +85,10 @@ async function refresh() {
   try {
     games.value = await api.adminGames() || []
   } catch (e) {
-    if (String(e.message).toLowerCase().includes('unauthorized')) {
+    const msg = (e as Error).message
+    if (String(msg).toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin')
-    } else err.value = e.message
+    } else err.value = msg
   }
 }
 
@@ -104,13 +106,13 @@ async function create() {
     timeoutSeconds.value = 30
     router.push(`/admin/games/${g.code}`)
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     loading.value = false
   }
 }
 
-async function remove(g) {
+async function remove(g: AdminGamesEntry) {
   const label = g.name ? `"${g.name}" (${g.code})` : g.code
   const ok = await confirm({
     title: `Delete ${label}?`,
@@ -127,7 +129,7 @@ async function remove(g) {
     await api.adminDeleteGame(g.code)
     games.value = games.value.filter(x => x.id !== g.id)
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     deleting.value = ''
   }

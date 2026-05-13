@@ -62,14 +62,14 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '../components/PhotoPicker.vue'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
 
-const props = defineProps({ code: String })
+const props = defineProps<{ code: string }>()
 const router = useRouter()
 const store = useGameStore()
 
@@ -88,7 +88,7 @@ async function submit() {
     store.setMe(r.token, { id: r.userId, name: name.value.trim(), gameId: r.gameId })
     router.push(`/g/${props.code}/setup`)
   } catch (e) {
-    err.value = e.message || 'Could not join'
+    err.value = (e as Error).message || 'Could not join'
   } finally {
     loading.value = false
   }

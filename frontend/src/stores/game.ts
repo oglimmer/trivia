@@ -1,9 +1,34 @@
 import { defineStore } from 'pinia'
-import { onMessage, wsConnectPlayer } from '../services/ws.js'
-import { api } from '../services/api.js'
+import { onMessage, wsConnectPlayer } from '../services/ws'
+import { api } from '../services/api'
+import type {
+  Answer,
+  AnswerAck,
+  Game,
+  LeaderboardEntry,
+  Question,
+  User,
+  WSMessage,
+} from '../types'
+
+interface GameStoreState {
+  connected: boolean | null
+  me: User | null
+  game: Game | null
+  question: Question | null
+  leaderboard: LeaderboardEntry[]
+  users: User[]
+  answers: Answer[]
+  lastAnswerAck: AnswerAck | null
+  wsStarted: boolean
+  isAdmin: boolean
+  // serverClockOffsetMs = serverTime - clientTime, refreshed on each gameState.
+  // Used by the question countdown so a skewed local clock doesn't bias the timer.
+  serverClockOffsetMs: number
+}
 
 export const useGameStore = defineStore('game', {
-  state: () => ({
+  state: (): GameStoreState => ({
     connected: null,
     me: null,
     game: null,
@@ -14,17 +39,15 @@ export const useGameStore = defineStore('game', {
     lastAnswerAck: null,
     wsStarted: false,
     isAdmin: !!localStorage.getItem('adminToken'),
-    // serverClockOffsetMs = serverTime - clientTime, refreshed on each gameState.
-    // Used by the question countdown so a skewed local clock doesn't bias the timer.
     serverClockOffsetMs: 0,
   }),
   getters: {
-    isPlayer: (s) => !!s.me,
-    isInGame: (s) => s.game && s.game.state === 'game',
-    isFinished: (s) => s.game && s.game.state === 'finished',
+    isPlayer: (s): boolean => !!s.me,
+    isInGame: (s): boolean => !!(s.game && s.game.state === 'game'),
+    isFinished: (s): boolean => !!(s.game && s.game.state === 'finished'),
   },
   actions: {
-    async ensureWS() {
+    async ensureWS(): Promise<void> {
       if (this.wsStarted) return
       const tok = localStorage.getItem('playerToken')
       if (!tok) return
@@ -32,7 +55,7 @@ export const useGameStore = defineStore('game', {
       wsConnectPlayer(tok)
       this.wsStarted = true
     },
-    async loadMe() {
+    async loadMe(): Promise<void> {
       const tok = localStorage.getItem('playerToken')
       if (!tok) { this.me = null; this.game = null; return }
       try {
@@ -45,25 +68,25 @@ export const useGameStore = defineStore('game', {
         this.game = null
       }
     },
-    setMe(token, user) {
+    setMe(token: string, user: User): void {
       localStorage.setItem('playerToken', token)
       this.me = user
     },
-    logout() {
+    logout(): void {
       localStorage.removeItem('playerToken')
       this.me = null
       this.game = null
       this.wsStarted = false
     },
-    setAdmin(token) {
+    setAdmin(token: string): void {
       localStorage.setItem('adminToken', token)
       this.isAdmin = true
     },
-    logoutAdmin() {
+    logoutAdmin(): void {
       localStorage.removeItem('adminToken')
       this.isAdmin = false
     },
-    _handle(m) {
+    _handle(m: WSMessage): void {
       switch (m.type) {
         case '_connected': this.connected = true; break
         case '_disconnected': this.connected = false; break
@@ -73,7 +96,7 @@ export const useGameStore = defineStore('game', {
             this.serverClockOffsetMs = new Date(d.serverNow).getTime() - Date.now()
           }
           this.game = {
-            ...(this.game || {}),
+            ...(this.game || {} as Game),
             code: d.code,
             name: d.name,
             state: d.state,
@@ -88,7 +111,7 @@ export const useGameStore = defineStore('game', {
           break
         }
         case 'users':
-          this.users = m.data || []
+          this.users = m.data ?? []
           break
         case 'answerAck':
           this.lastAnswerAck = m.data

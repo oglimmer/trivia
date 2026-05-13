@@ -34,30 +34,35 @@
       <span></span>
       <button class="btn-link" @click="clear">Clear photo</button>
     </div>
-    <input ref="fileEl" type="file" accept="image/*" :capture="capture" @change="onFile" hidden />
+    <input ref="fileEl" type="file" accept="image/*" :capture="capture || undefined" @change="onFile" hidden />
     <div v-if="busy" class="helper">Processing image…</div>
     <div v-if="err" class="error">{{ err }}</div>
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+import { ref, type Ref } from 'vue'
 
-const props = defineProps({
-  modelValue: { type: String, default: '' },
-  maxSize: { type: Number, default: 1024 },
-  noFrame: { type: Boolean, default: false },
-  allowRandom: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  modelValue?: string
+  maxSize?: number
+  noFrame?: boolean
+  allowRandom?: boolean
+}>(), {
+  modelValue: '',
+  maxSize: 1024,
+  noFrame: false,
+  allowRandom: false,
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
-const fileEl = ref(null)
-const capture = ref(null)
+const fileEl = ref<HTMLInputElement | null>(null)
+const capture = ref<'user' | 'environment' | null>(null)
 const busy = ref(false)
 const err = ref('')
 const isRandom = ref(false)
 
-function pick(cap) {
+function pick(cap?: 'user' | 'environment') {
   capture.value = cap || null
   setTimeout(() => fileEl.value && fileEl.value.click(), 0)
 }
@@ -67,9 +72,10 @@ function clear() {
   emit('update:modelValue', '')
 }
 
-async function onFile(e) {
+async function onFile(e: Event) {
   err.value = ''
-  const f = e.target.files && e.target.files[0]
+  const target = e.target as HTMLInputElement
+  const f = target.files && target.files[0]
   if (!f) return
   busy.value = true
   try {
@@ -77,14 +83,14 @@ async function onFile(e) {
     isRandom.value = false
     emit('update:modelValue', dataUrl)
   } catch (ex) {
-    err.value = ex.message
+    err.value = (ex as Error).message
   } finally {
     busy.value = false
-    e.target.value = ''
+    target.value = ''
   }
 }
 
-function fileToResizedDataURL(file, maxSize) {
+function fileToResizedDataURL(file: File, maxSize: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader()
     fr.onerror = () => reject(new Error('Could not read file'))
@@ -98,11 +104,12 @@ function fileToResizedDataURL(file, maxSize) {
         cvs.width = w
         cvs.height = h
         const ctx = cvs.getContext('2d')
+        if (!ctx) { reject(new Error('Canvas unsupported')); return }
         ctx.drawImage(img, 0, 0, w, h)
         resolve(cvs.toDataURL('image/jpeg', 0.82))
       }
       img.onerror = () => reject(new Error('Could not decode image'))
-      img.src = fr.result
+      img.src = fr.result as string
     }
     fr.readAsDataURL(file)
   })
@@ -126,8 +133,8 @@ const RANDOM_BGS = [
 const lastEmojiIdx = ref(-1)
 const lastBgIdx = ref(-1)
 
-function rollIdx(maxLen, lastRef) {
-  let i
+function rollIdx(maxLen: number, lastRef: Ref<number>): number {
+  let i: number
   do { i = Math.floor(Math.random() * maxLen) } while (maxLen > 1 && i === lastRef.value)
   lastRef.value = i
   return i
@@ -140,6 +147,7 @@ function generateRandom() {
   cvs.width = size
   cvs.height = size
   const ctx = cvs.getContext('2d')
+  if (!ctx) { err.value = 'Canvas unsupported'; return }
 
   const bg = RANDOM_BGS[rollIdx(RANDOM_BGS.length, lastBgIdx)]
   ctx.fillStyle = bg
@@ -176,7 +184,7 @@ function generateRandom() {
   try {
     isRandom.value = true
     emit('update:modelValue', cvs.toDataURL('image/png'))
-  } catch (ex) {
+  } catch {
     err.value = 'Could not generate avatar'
   }
 }

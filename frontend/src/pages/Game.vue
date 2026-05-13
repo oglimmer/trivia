@@ -137,21 +137,23 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useGameStore } from '../stores/game.js'
-import { wsSend } from '../services/ws.js'
-import { api } from '../services/api.js'
+import { useGameStore } from '../stores/game'
+import { wsSend } from '../services/ws'
+import { api } from '../services/api'
 
-const props = defineProps({ code: String })
+type VerdictKind = 'correct' | 'wrong' | 'none'
+
+const props = defineProps<{ code: string }>()
 const router = useRouter()
 const store = useGameStore()
 
-const numberGuess = ref('')
+const numberGuess = ref<number | ''>('')
 const remaining = ref(30)
 const ringPct = ref(100)
-let tickHandle = null
+let tickHandle: ReturnType<typeof setInterval> | null = null
 const letters = ['A', 'B', 'C', 'D']
 
 const q = computed(() => store.question)
@@ -178,7 +180,7 @@ const answersWithUsers = computed(() => {
 
 const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myId.value))
 
-const verdictLines = {
+const verdictLines: Record<VerdictKind, Array<{ headline: string; sub: string }>> = {
   correct: [
     { headline: 'NAILED IT!', sub: 'Big brain energy detected.' },
     { headline: 'CORRECT!', sub: 'Frame this moment. Tell your mum.' },
@@ -200,7 +202,7 @@ const verdictLines = {
   ],
 }
 
-function pickLine(kind, seed) {
+function pickLine(kind: VerdictKind, seed: string) {
   const lines = verdictLines[kind]
   let h = 0
   const s = String(seed || '')
@@ -209,14 +211,14 @@ function pickLine(kind, seed) {
 }
 
 const verdict = computed(() => {
-  const seed = q.value && q.value.id
+  const seed = (q.value && q.value.id) || ''
   if (!myAnswer.value) {
-    return { kind: 'none', emoji: '👻', ...pickLine('none', seed) }
+    return { kind: 'none' as const, emoji: '👻', ...pickLine('none', seed) }
   }
   if (myAnswer.value.isCorrect) {
-    return { kind: 'correct', emoji: '🎉', ...pickLine('correct', seed) }
+    return { kind: 'correct' as const, emoji: '🎉', ...pickLine('correct', seed) }
   }
-  return { kind: 'wrong', emoji: '💥', ...pickLine('wrong', seed) }
+  return { kind: 'wrong' as const, emoji: '💥', ...pickLine('wrong', seed) }
 })
 
 onMounted(async () => {
@@ -254,7 +256,7 @@ function resetTick() {
   tickHandle = setInterval(tick, 200)
 }
 
-function answer(v) {
+function answer(v: unknown) {
   if (!q.value) return
   wsSend('answer', { questionId: q.value.id, value: v })
 }

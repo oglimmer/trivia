@@ -29,11 +29,11 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
 
 const pwd = ref('')
 const loading = ref(false)
@@ -53,7 +53,7 @@ async function login() {
     store.setAdmin(r.token)
     router.push('/admin/games')
   } catch (e) {
-    err.value = e.message || 'login failed'
+    err.value = (e as Error).message || 'login failed'
   } finally {
     loading.value = false
   }

@@ -197,25 +197,26 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api.js'
-import { onMessage, wsConnectAdmin, disconnect } from '../services/ws.js'
-import { useGameStore } from '../stores/game.js'
-import { confirm } from '../services/dialog.js'
+import { api } from '../services/api'
+import { onMessage, wsConnectAdmin, disconnect } from '../services/ws'
+import { useGameStore } from '../stores/game'
+import { confirm } from '../services/dialog'
+import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '../types'
 
-const props = defineProps({ code: String })
+const props = defineProps<{ code: string }>()
 const router = useRouter()
 const store = useGameStore()
 
-const game = ref(null)
-const users = ref([])
-const questions = ref([])
-const currentQ = ref(null)
-const leaderboard = ref([])
-const playerAnswered = ref(new Set())
-const online = ref(new Set())
+const game = ref<Game | null>(null)
+const users = ref<User[]>([])
+const questions = ref<Question[]>([])
+const currentQ = ref<Question | null>(null)
+const leaderboard = ref<LeaderboardEntry[]>([])
+const playerAnswered = ref<Set<string>>(new Set())
+const online = ref<Set<string>>(new Set())
 const err = ref('')
 const remaining = ref(0)
 const timeoutDraft = ref(30)
@@ -224,8 +225,8 @@ const deletingUser = ref('')
 const deletingQuestion = ref('')
 const copyingUser = ref('')
 const copiedUser = ref('')
-let tick = null
-let stopListening = null
+let tick: ReturnType<typeof setInterval> | null = null
+let stopListening: (() => void) | null = null
 const letters = ['A', 'B', 'C', 'D']
 // Server-anchored clock offset (ms). Refreshed on every gameState arrival.
 let serverClockOffsetMs = 0
@@ -233,11 +234,11 @@ let serverClockOffsetMs = 0
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
 const onlineCount = computed(() => users.value.filter(u => online.value.has(u.id)).length)
 
-function userName(id) {
+function userName(id: string): string {
   const u = users.value.find(u => u.id === id)
   return u ? u.name : '...'
 }
-function hasQuestion(uid) {
+function hasQuestion(uid: string): boolean {
   return questions.value.some(q => q.userId === uid)
 }
 
@@ -250,19 +251,20 @@ async function load() {
     online.value = new Set(r.online || [])
     timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
   } catch (e) {
-    if (String(e.message).toLowerCase().includes('unauthorized')) {
+    const msg = (e as Error).message
+    if (String(msg).toLowerCase().includes('unauthorized')) {
       store.logoutAdmin(); router.replace('/admin'); return
     }
-    err.value = e.message
+    err.value = msg
   }
 }
 
-function applyState(d) {
+function applyState(d: GameStateMsg) {
   if (d.serverNow) {
     serverClockOffsetMs = new Date(d.serverNow).getTime() - Date.now()
   }
   game.value = {
-    ...game.value,
+    ...(game.value || {} as Game),
     code: d.code, name: d.name, state: d.state,
     questionState: d.questionState,
     currentQuestionId: d.currentQuestionId,
@@ -286,13 +288,13 @@ onMounted(async () => {
   await load()
 
   stopListening = onMessage((m) => {
-    if (m.type === 'gameState') applyState(m.data)
-    else if (m.type === 'users') users.value = m.data || []
-    else if (m.type === 'questionsAdmin') questions.value = m.data || []
-    else if (m.type === 'playerAnswered') playerAnswered.value.add(m.data.userId)
-    else if (m.type === 'presence') online.value = new Set(m.data.online || [])
+    if (m.type === 'gameState') applyState(m.data as GameStateMsg)
+    else if (m.type === 'users') users.value = (m.data as User[]) || []
+    else if (m.type === 'questionsAdmin') questions.value = (m.data as Question[]) || []
+    else if (m.type === 'playerAnswered') playerAnswered.value.add((m.data as { userId: string }).userId)
+    else if (m.type === 'presence') online.value = new Set((m.data as { online?: string[] }).online || [])
   })
-  wsConnectAdmin(localStorage.getItem('adminToken'), props.code)
+  wsConnectAdmin(localStorage.getItem('adminToken') || '', props.code)
 
   tick = setInterval(() => {
     if (game.value?.questionState === 'active' && game.value?.questionStartedAt) {
@@ -315,7 +317,7 @@ watch(() => game.value && game.value.state, () => { /* stay on page */ })
 async function startGame() {
   err.value = ''
   try { await api.adminSetState(props.code, 'game') }
-  catch (e) { err.value = e.message }
+  catch (e) { err.value = (e as Error).message }
 }
 
 async function saveTimeout() {
@@ -324,7 +326,7 @@ async function saveTimeout() {
   try {
     await api.adminUpdateSettings(props.code, { questionTimeoutSeconds: Number(timeoutDraft.value) || 30 })
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     savingTimeout.value = false
   }
@@ -340,25 +342,25 @@ async function endGame() {
     icon: '⏹',
   })
   if (!ok) return
-  try { await api.adminFinish(props.code) } catch (e) { err.value = e.message }
+  try { await api.adminFinish(props.code) } catch (e) { err.value = (e as Error).message }
 }
 
 async function activateNext() {
-  try { await api.adminActivate(props.code, null) } catch (e) { err.value = e.message }
+  try { await api.adminActivate(props.code, null) } catch (e) { err.value = (e as Error).message }
 }
 
 async function reveal() {
-  try { await api.adminReveal(props.code) } catch (e) { err.value = e.message }
+  try { await api.adminReveal(props.code) } catch (e) { err.value = (e as Error).message }
 }
 
 async function next() {
   try {
     const r = await api.adminNext(props.code)
     if (r && r.done) { /* state arrives via ws */ }
-  } catch (e) { err.value = e.message }
+  } catch (e) { err.value = (e as Error).message }
 }
 
-async function copyImpersonateLink(u) {
+async function copyImpersonateLink(u: User) {
   err.value = ''
   copyingUser.value = u.id
   try {
@@ -385,13 +387,13 @@ async function copyImpersonateLink(u) {
     copiedUser.value = u.id
     setTimeout(() => { if (copiedUser.value === u.id) copiedUser.value = '' }, 2000)
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     copyingUser.value = ''
   }
 }
 
-async function removeUser(u) {
+async function removeUser(u: User) {
   const ok = await confirm({
     title: `Remove ${u.name}?`,
     message: 'Their submission and any answers will also be deleted. This cannot be undone.',
@@ -406,13 +408,13 @@ async function removeUser(u) {
   try {
     await api.adminDeleteUser(props.code, u.id)
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     deletingUser.value = ''
   }
 }
 
-async function removeQuestion(q) {
+async function removeQuestion(q: Question) {
   const ok = await confirm({
     title: 'Delete this submission?',
     message: `"${q.text}" — by ${userName(q.userId)}. The player stays in the game and can submit a new question.`,
@@ -427,7 +429,7 @@ async function removeQuestion(q) {
   try {
     await api.adminDeleteQuestion(props.code, q.id)
   } catch (e) {
-    err.value = e.message
+    err.value = (e as Error).message
   } finally {
     deletingQuestion.value = ''
   }

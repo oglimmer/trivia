@@ -34,16 +34,16 @@
   </transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, ref, watch, onUnmounted } from 'vue'
-import { dialogState, resolveDialog } from '../services/dialog.js'
+import { dialogState, resolveDialog } from '../services/dialog'
 
 const d = computed(() => dialogState.current)
-const cancelBtn = ref(null)
-const confirmBtn = ref(null)
+const cancelBtn = ref<HTMLButtonElement | null>(null)
+const confirmBtn = ref<HTMLButtonElement | null>(null)
 const titleId = 'dlg-title'
 const msgId = 'dlg-msg'
-let prevFocus = null
+let prevFocus: Element | null = null
 let prevOverflow = ''
 
 function confirm() { resolveDialog(true) }
@@ -59,7 +59,7 @@ watch(d, async (cur) => {
     target?.focus()
   } else {
     document.body.style.overflow = prevOverflow
-    if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus()
+    if (prevFocus && 'focus' in prevFocus && typeof (prevFocus as HTMLElement).focus === 'function') (prevFocus as HTMLElement).focus()
     prevFocus = null
   }
 })

@@ -1,12 +1,14 @@
 // Single WebSocket connection per page. Auto-reconnect with backoff.
 // Emits typed messages to listeners.
 
-const listeners = new Set()
-let ws = null
-let url = null
+import type { WSListener, WSMessage } from '../types'
+
+const listeners = new Set<WSListener>()
+let ws: WebSocket | null = null
+let url: string | null = null
 let backoff = 500
-let retryTimer = null
-let heartbeatTimer = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 let lastRecvAt = 0
 let paused = false
 
@@ -17,16 +19,16 @@ let paused = false
 const HEARTBEAT_MS = 20000
 const STALE_MS = 30000
 
-export function onMessage(fn) {
+export function onMessage(fn: WSListener): () => void {
   listeners.add(fn)
-  return () => listeners.delete(fn)
+  return () => { listeners.delete(fn) }
 }
 
-function emit(msg) {
+function emit(msg: WSMessage): void {
   for (const fn of listeners) fn(msg)
 }
 
-function startHeartbeat() {
+function startHeartbeat(): void {
   stopHeartbeat()
   heartbeatTimer = setInterval(() => {
     if (typeof document !== 'undefined' && document.hidden) return
@@ -41,11 +43,11 @@ function startHeartbeat() {
   }, HEARTBEAT_MS)
 }
 
-function stopHeartbeat() {
+function stopHeartbeat(): void {
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null }
 }
 
-function teardownSocket() {
+function teardownSocket(): void {
   stopHeartbeat()
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
   if (ws) {
@@ -55,7 +57,7 @@ function teardownSocket() {
   }
 }
 
-function connect() {
+function connect(): void {
   if (!url) return
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const u = url.startsWith('ws') ? url : `${proto}//${location.host}${url}`
@@ -74,45 +76,45 @@ function connect() {
       backoff = Math.min(backoff * 2, 5000)
     }
   }
-  ws.onerror = () => { try { ws.close() } catch {} }
-  ws.onmessage = (ev) => {
+  ws.onerror = () => { try { ws?.close() } catch {} }
+  ws.onmessage = (ev: MessageEvent<string>) => {
     lastRecvAt = Date.now()
     try {
-      const msg = JSON.parse(ev.data)
+      const msg = JSON.parse(ev.data) as WSMessage
       if (msg && msg.type === 'pong') return
       emit(msg)
     } catch {}
   }
 }
 
-function reconnectNow() {
+function reconnectNow(): void {
   backoff = 500
   teardownSocket()
   connect()
 }
 
-export function wsConnectPlayer(token) {
+export function wsConnectPlayer(token: string): void {
   url = `/ws?token=${encodeURIComponent(token)}`
   reconnectNow()
 }
 
-export function wsConnectAdmin(adminToken, code) {
+export function wsConnectAdmin(adminToken: string, code: string): void {
   url = `/ws?role=admin&token=${encodeURIComponent(adminToken)}&code=${encodeURIComponent(code)}`
   reconnectNow()
 }
 
-export function wsSend(type, data) {
+export function wsSend(type: string, data: unknown): void {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type, data }))
   }
 }
 
-export function disconnect() {
+export function disconnect(): void {
   url = null
   teardownSocket()
 }
 
-function onWake() {
+function onWake(): void {
   if (!url) return
   paused = false
   reconnectNow()
@@ -121,7 +123,7 @@ function onWake() {
 // Hide → close the socket so the server marks the player offline immediately
 // instead of waiting for the 75s read deadline. The close frame goes out
 // synchronously before the OS suspends the page on mobile.
-function onHide() {
+function onHide(): void {
   if (!url) return
   paused = true
   teardownSocket()

@@ -8,12 +8,12 @@
   </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
-import { disconnect } from '../services/ws.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
+import { disconnect } from '../services/ws'
 
 const router = useRouter()
 const store = useGameStore()
@@ -52,7 +52,7 @@ onMounted(async () => {
     else router.replace('/')
   } catch (e) {
     localStorage.removeItem('playerToken')
-    err.value = e.message || 'Invalid or expired token.'
+    err.value = (e as Error).message || 'Invalid or expired token.'
   }
 })
 </script>

@@ -51,23 +51,24 @@
   </transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import PhotoPicker from './PhotoPicker.vue'
-import { api } from '../services/api.js'
-import { useGameStore } from '../stores/game.js'
+import { api } from '../services/api'
+import { useGameStore } from '../stores/game'
+import type { User } from '../types'
 
-const props = defineProps({ open: Boolean })
-const emit = defineEmits(['close'])
+const props = defineProps<{ open?: boolean }>()
+const emit = defineEmits<{ (e: 'close'): void }>()
 const store = useGameStore()
 
 const name = ref('')
 const photo = ref('')
 const err = ref('')
 const saving = ref(false)
-const nameEl = ref(null)
+const nameEl = ref<HTMLInputElement | null>(null)
 
-let prevFocus = null
+let prevFocus: Element | null = null
 let prevOverflow = ''
 
 const canSave = computed(() => {
@@ -91,7 +92,7 @@ watch(() => props.open, async (v) => {
     nameEl.value?.focus()
   } else {
     document.body.style.overflow = prevOverflow
-    if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus()
+    if (prevFocus && 'focus' in prevFocus && typeof (prevFocus as HTMLElement).focus === 'function') (prevFocus as HTMLElement).focus()
     prevFocus = null
   }
 })
@@ -111,10 +112,10 @@ async function save() {
   try {
     const newName = name.value.trim()
     await api.updateMe({ name: newName, photoB64: photo.value })
-    store.me = { ...(store.me || {}), name: newName, photoB64: photo.value }
+    store.me = { ...(store.me || {} as User), name: newName, photoB64: photo.value }
     emit('close')
   } catch (e) {
-    err.value = e.message || 'Could not save'
+    err.value = (e as Error).message || 'Could not save'
   } finally {
     saving.value = false
   }
