@@ -1,10 +1,16 @@
 <template>
   <main class="stack-lg">
-    <div v-if="!q" class="card card--cream stack center card-stickered">
+    <div v-if="!initialReady" class="card card--cream stack center" aria-busy="true">
       <div class="spinner" aria-hidden="true"></div>
-      <h2>Waiting for the host…</h2>
-      <p class="muted">The next question is about to drop.</p>
     </div>
+
+    <template v-else-if="!q">
+      <div class="card card--cream stack center card-stickered">
+        <div class="spinner" aria-hidden="true"></div>
+        <h2>Waiting for the host…</h2>
+        <p class="muted">The next question is about to drop.</p>
+      </div>
+    </template>
 
     <template v-else>
       <article class="q-card stack">
@@ -72,7 +78,7 @@
 
         <!-- Reveal -->
         <template v-if="qState === 'revealed'">
-          <div :class="['verdict', `verdict--${verdict.kind}`]" role="status" aria-live="polite">
+          <div :class="['verdict', `verdict--${verdict.kind}`, animateVerdict && `verdict-anim--${verdict.kind}`]" role="status" aria-live="polite">
             <div class="verdict__stamp" aria-hidden="true">{{ verdict.emoji }}</div>
             <div class="verdict__text">
               <div class="verdict__headline">{{ verdict.headline }}</div>
@@ -138,10 +144,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, toRef } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
-import { wsSend } from '@/services/ws'
+import { onMessage, wsSend } from '@/services/ws'
 import { playerApi } from '@/services/api'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 
@@ -153,6 +159,10 @@ const store = useGameStore()
 
 const numberGuess = ref<number | ''>('')
 const letters = ['A', 'B', 'C', 'D']
+const initialReady = ref(false)
+const animateVerdict = ref(false)
+let pageLoaded = false
+let stopListen: (() => void) | null = null
 
 const { remaining, ringPct } = useQuestionCountdown(
   toRef(store, 'game'),
@@ -224,6 +234,12 @@ const verdict = computed(() => {
   return { kind: 'wrong' as const, emoji: '💥', ...pickLine('wrong', seed) }
 })
 
+async function markReady() {
+  await nextTick()
+  initialReady.value = true
+  pageLoaded = true
+}
+
 onMounted(async () => {
   await store.loadMe()
   if (!store.me) { router.replace('/'); return }
@@ -231,7 +247,34 @@ onMounted(async () => {
   try {
     store.setUsers(await playerApi.listUsers(props.code))
   } catch {}
+
+  // If we already have authoritative state (navigated from setup, or the state
+  // is 'idle' which doesn't need a question payload), unlock immediately.
+  const needsQuestion = qState.value === 'active' || qState.value === 'revealed'
+  if (!needsQuestion || q.value) {
+    await markReady()
+    return
+  }
+
+  // Otherwise, wait for the first WS gameState message that brings the question.
+  stopListen = onMessage((m) => {
+    if (m.type === 'gameState') {
+      if (stopListen) { stopListen(); stopListen = null }
+      void markReady()
+    }
+  })
 })
+
+onUnmounted(() => {
+  if (stopListen) stopListen()
+})
+
+// Only animate the verdict pop on real state transitions during play, not on
+// the initial mount when reloading mid-reveal.
+watch(qState, (newVal) => {
+  if (!pageLoaded) return
+  animateVerdict.value = newVal === 'revealed'
+}, { flush: 'pre' })
 
 watch(() => store.game && store.game.state, (s) => {
   if (s === 'setup') router.replace(`/g/${props.code}/setup`)

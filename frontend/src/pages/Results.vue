@@ -1,6 +1,6 @@
 <template>
   <main class="stack-lg">
-    <transition name="fade" mode="out-in">
+    <transition :name="initialReady ? 'fade' : ''" mode="out-in">
       <div :key="phase" v-if="leaderboard.length">
         <template v-if="phase === 'three'">
           <div class="card stack">
@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { playerApi } from '@/services/api'
 import Spotlight from '@/components/Spotlight.vue'
@@ -57,6 +57,7 @@ import Spotlight from '@/components/Spotlight.vue'
 const props = defineProps<{ code: string }>()
 const store = useGameStore()
 const phase = ref<'three' | 'two' | 'one' | 'ladder'>('three')
+const initialReady = ref(false)
 
 const leaderboard = computed(() => store.leaderboard)
 const byRank = computed(() => leaderboard.value)
@@ -69,5 +70,8 @@ onMounted(async () => {
     store.setLeaderboard(await playerApi.leaderboard(props.code))
   } catch {}
   if (leaderboard.value.length < 3) phase.value = leaderboard.value.length === 0 ? 'ladder' : 'one'
+
+  await nextTick()
+  initialReady.value = true
 })
 </script>

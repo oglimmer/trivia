@@ -456,10 +456,13 @@ label {
   position: relative;
   overflow: hidden;
 }
-.verdict--correct { background: var(--mint-2);  animation: verdict-pop-left  .35s cubic-bezier(.34,1.56,.64,1) both; }
-.verdict--none    { background: var(--cream-2); animation: verdict-pop-none  .35s cubic-bezier(.34,1.56,.64,1) both; }
-.verdict--wrong   {
-  background: var(--pink-2);
+.verdict--correct { background: var(--mint-2); }
+.verdict--none    { background: var(--cream-2); }
+.verdict--wrong   { background: var(--pink-2); }
+
+.verdict-anim--correct { animation: verdict-pop-left  .35s cubic-bezier(.34,1.56,.64,1) both; }
+.verdict-anim--none    { animation: verdict-pop-none  .35s cubic-bezier(.34,1.56,.64,1) both; }
+.verdict-anim--wrong   {
   animation:
     verdict-pop-right .35s cubic-bezier(.34,1.56,.64,1) both,
     verdict-shake     .5s ease-in-out .35s 1;
@@ -507,7 +510,7 @@ label {
   80% { transform: rotate(1.2deg) translateX(4px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .verdict--correct, .verdict--wrong, .verdict--none { animation: none; }
+  .verdict-anim--correct, .verdict-anim--wrong, .verdict-anim--none { animation: none; }
 }
 
 /* ---------- Big code input ---------- */

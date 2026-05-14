@@ -49,7 +49,15 @@
         <div class="stack">
           <div v-for="q in questions" :key="q.id" class="card card--flat" style="background: var(--paper); border: 2px solid var(--ink); padding: 14px;">
             <div class="row" style="gap: 12px; align-items: flex-start;">
-              <img class="avatar" :src="q.photoB64" alt="" />
+              <button
+                type="button"
+                class="avatar-btn"
+                @click="previewImage = q.photoB64"
+                :aria-label="`Preview photo by ${userName(q.userId)}`"
+                title="Click to preview"
+              >
+                <img class="avatar" :src="q.photoB64" alt="" />
+              </button>
               <div style="flex: 1; min-width: 0;">
                 <div class="bold">{{ q.text }}</div>
                 <div class="muted" style="font-size: .85rem;">
@@ -181,6 +189,28 @@
       </div>
     </template>
 
+    <transition name="dialog">
+      <div
+        v-if="previewImage"
+        class="img-preview-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Photo preview"
+        @mousedown.self="previewImage = ''"
+        @keydown.esc.prevent="previewImage = ''"
+        tabindex="-1"
+        ref="previewBackdrop"
+      >
+        <button
+          type="button"
+          class="img-preview-close"
+          aria-label="Close preview"
+          @click="previewImage = ''"
+        >×</button>
+        <img class="img-preview-img" :src="previewImage" alt="" />
+      </div>
+    </transition>
+
     <template v-if="game?.state === 'finished'">
       <div class="card stack">
         <h2>Final standings</h2>
@@ -205,6 +235,7 @@ import { onMessage, wsConnectAdmin, disconnect } from '@/services/ws'
 import { useGameStore } from '@/stores/game'
 import { confirm } from '@/services/dialog'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
+import { useModalRef } from '@/composables/useModal'
 import { errMsg } from '@/composables/errMsg'
 import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/types'
 
@@ -226,6 +257,10 @@ const deletingUser = ref('')
 const deletingQuestion = ref('')
 const copyingUser = ref('')
 const copiedUser = ref('')
+const previewImage = ref('')
+const previewBackdrop = ref<HTMLElement | null>(null)
+const previewOpen = computed(() => !!previewImage.value)
+useModalRef(previewOpen, () => previewBackdrop.value)
 let stopListening: (() => void) | null = null
 const letters = ['A', 'B', 'C', 'D']
 // Server-anchored clock offset (ms). Refreshed on every gameState arrival.
@@ -481,4 +516,56 @@ async function removeQuestion(q: Question) {
   right: -1px;
   bottom: -1px;
 }
+
+.avatar-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.avatar-btn:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.img-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 27, 38, .85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1100;
+  cursor: zoom-out;
+}
+.img-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  box-shadow: var(--shadow-3);
+  cursor: default;
+}
+.img-preview-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: var(--bw) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+}
+.img-preview-close:hover { background: var(--coral); color: var(--paper); }
 </style>

@@ -1,6 +1,10 @@
 <template>
   <main class="stack-lg">
-    <transition name="fade" mode="out-in">
+    <div v-if="!initialReady" class="card card--cream stack center" aria-busy="true">
+      <div class="spinner" aria-hidden="true"></div>
+    </div>
+
+    <transition v-else name="fade" mode="out-in">
       <div v-if="saved && !editing" key="waiting" class="card card--mint stack center card-stickered">
         <div style="font-size: 3rem; line-height: 1;">🎉</div>
         <h1>Locked in!</h1>
@@ -178,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import Stepper from '@/components/Stepper.vue'
@@ -205,6 +209,7 @@ const err = ref('')
 const aiBusy = ref(false)
 const aiConfirm = ref(false)
 const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
+const initialReady = ref(false)
 
 const users = computed(() => store.users)
 
@@ -248,6 +253,9 @@ onMounted(async () => {
     const mine = qs.find(q => q.userId === store.me?.id)
     if (mine) hydrateFromQuestion(mine)
   } catch {}
+
+  await nextTick()
+  initialReady.value = true
 })
 
 watch(() => store.game && store.game.state, (s) => {
