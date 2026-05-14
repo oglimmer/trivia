@@ -22,9 +22,9 @@ anthropic:
 #                    send credentials over plaintext, so auth won't work)
 smtp:
   enabled: true
-  host: "192.168.178.52"
-  port: 25
-  tls: false
+  host: "smtp.fastmail.com"
+  port: 465
+  tls: true
   starttls: false
   from: "noreply@oglimmer.com"
   replyEmail: "noreply@oglimmer.com"
