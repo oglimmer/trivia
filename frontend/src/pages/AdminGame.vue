@@ -531,7 +531,7 @@ async function copyImpersonateLink(u: User) {
 async function removeUser(u: User) {
   const ok = await confirm({
     title: `Remove ${u.name}?`,
-    message: 'Their submission and any answers will also be deleted. This cannot be undone.',
+    message: 'Their submission stays in the game — delete it separately if you want it gone.',
     confirmLabel: 'Remove',
     cancelLabel: 'Keep',
     tone: 'danger',

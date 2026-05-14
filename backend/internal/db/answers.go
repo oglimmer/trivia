@@ -24,7 +24,7 @@ func (d *DB) UpdateAnswerScore(ctx context.Context, questionID, userID string, i
 
 func (d *DB) AnswersForQuestion(ctx context.Context, questionID string) ([]Answer, error) {
 	rows, err := d.Pool.Query(ctx, `
-		SELECT id, question_id, user_id, answer, response_ms, is_correct, points, created_at
+		SELECT id, question_id, COALESCE(user_id::text, ''), answer, response_ms, is_correct, points, created_at
 		FROM answers WHERE question_id=$1 ORDER BY response_ms ASC
 	`, questionID)
 	if err != nil {

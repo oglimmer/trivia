@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const questionColumns = `id, game_id, user_id, text, photo_b64, answer_type,
+const questionColumns = `id, game_id, COALESCE(user_id::text, '') AS user_id, text, photo_b64, answer_type,
 	options, correct, sort_order, created_at`
 
 func scanQuestion(row pgx.Row, q *Question) error {
