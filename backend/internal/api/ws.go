@@ -56,6 +56,22 @@ func (s *Server) onWSJoin(c *ws.Client) {
 	if err != nil {
 		return
 	}
+	// If a player has already answered the currently-active question, replay an
+	// answerAck before gameState so a page reload mid-question lands on the
+	// "Locked in!" view instead of the answer buttons.
+	if c.Role == ws.RolePlayer && g.QuestionState == "active" && g.CurrentQuestionID != nil {
+		if ans, err := s.DB.AnswersForQuestion(ctx, *g.CurrentQuestionID); err == nil {
+			for _, a := range ans {
+				if a.UserID == c.UserID {
+					c.Send(map[string]any{
+						"type": "answerAck",
+						"data": map[string]any{"questionId": a.QuestionID, "responseMs": a.ResponseMs},
+					})
+					break
+				}
+			}
+		}
+	}
 	c.Send(s.gameStateEnvelope(ctx, g, c.Role == ws.RoleAdmin))
 	if users, err := s.DB.ListUsers(ctx, c.GameID); err == nil {
 		c.Send(map[string]any{"type": "users", "data": users})
