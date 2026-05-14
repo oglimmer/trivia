@@ -262,6 +262,18 @@ select {
   background-repeat: no-repeat;
   padding-right: 40px;
 }
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.2;
+  min-height: calc(1.2em + 28px + (var(--bw) * 2));
+}
 label {
   display: block;
   font-size: .82rem;
