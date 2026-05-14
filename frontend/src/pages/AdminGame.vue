@@ -32,8 +32,23 @@
           {{ savingTimeout ? '…' : 'Save' }}
         </button>
       </div>
+      <div v-if="game?.state === 'setup'" class="row wrap" style="gap: 10px; align-items: center;">
+        <label for="scheduled-input" class="bold" style="margin: 0;">Scheduled start</label>
+        <input
+          id="scheduled-input"
+          v-model="scheduledDraft"
+          type="datetime-local"
+        />
+        <button class="btn-ghost btn-sm" :disabled="savingSchedule || !scheduledDirty" @click="saveSchedule">
+          {{ savingSchedule ? '…' : 'Save' }}
+        </button>
+        <button v-if="scheduledDraft" class="btn-link btn-sm" :disabled="savingSchedule" @click="clearSchedule">
+          Clear
+        </button>
+      </div>
       <div v-else-if="game" class="muted" style="font-size: .85rem;">
         Question timeout: <span class="bold">{{ game.questionTimeoutSeconds || 30 }}s</span>
+        <span v-if="game.scheduledAt"> · Scheduled: <span class="bold">{{ formatScheduled(game.scheduledAt) }}</span></span>
       </div>
 
       <div v-if="err" class="error">{{ err }}</div>
@@ -277,6 +292,8 @@ const online = ref<Set<string>>(new Set())
 const err = ref('')
 const timeoutDraft = ref(30)
 const savingTimeout = ref(false)
+const scheduledDraft = ref('')
+const savingSchedule = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
 const copyingUser = ref('')
@@ -317,6 +334,7 @@ async function load() {
     questions.value = r.questions || []
     online.value = new Set(r.online || [])
     timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
+    scheduledDraft.value = isoToLocalInput(r.game?.scheduledAt)
   } catch (e) {
     const msg = errMsg(e)
     if (msg.toLowerCase().includes('unauthorized')) {
@@ -337,10 +355,14 @@ function applyState(d: GameStateMsg) {
     currentQuestionId: d.currentQuestionId,
     questionStartedAt: d.questionStartedAt,
     questionTimeoutSeconds: d.questionTimeoutSeconds,
+    scheduledAt: d.scheduledAt,
   }
   // Keep the edit field in sync when we're not actively editing.
   if (d.state === 'setup' && !savingTimeout.value) {
     timeoutDraft.value = d.questionTimeoutSeconds || 30
+  }
+  if (d.state === 'setup' && !savingSchedule.value) {
+    scheduledDraft.value = isoToLocalInput(d.scheduledAt)
   }
   if (d.question) currentQ.value = d.question
   else if (d.questionState === 'idle') currentQ.value = null
@@ -386,6 +408,62 @@ async function saveTimeout() {
     err.value = errMsg(e)
   } finally {
     savingTimeout.value = false
+  }
+}
+
+// "datetime-local" inputs use the local TZ; converting to/from the ISO string
+// the API speaks needs explicit Date hops so we don't ship UTC strings into
+// the local-time field by mistake.
+function isoToLocalInput(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+function localInputToIso(v: string): string | null {
+  if (!v) return null
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return null
+  return d.toISOString()
+}
+function formatScheduled(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+const scheduledDirty = computed(() => {
+  return scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt)
+})
+
+async function saveSchedule() {
+  err.value = ''
+  savingSchedule.value = true
+  try {
+    const iso = localInputToIso(scheduledDraft.value)
+    await adminApi.updateSettings(props.code, { scheduledAt: iso })
+  } catch (e) {
+    err.value = errMsg(e)
+  } finally {
+    savingSchedule.value = false
+  }
+}
+
+async function clearSchedule() {
+  err.value = ''
+  savingSchedule.value = true
+  try {
+    await adminApi.updateSettings(props.code, { scheduledAt: null })
+    scheduledDraft.value = ''
+  } catch (e) {
+    err.value = errMsg(e)
+  } finally {
+    savingSchedule.value = false
   }
 }
 

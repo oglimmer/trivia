@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/oglimmer/trivia/backend/internal/db"
 )
@@ -15,12 +16,13 @@ import (
 // Methods are grouped by aggregate purely for readability.
 type Store interface {
 	// Games
-	CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int) (*db.Game, error)
+	CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time) (*db.Game, error)
 	GameByCode(ctx context.Context, code string) (*db.Game, error)
 	GameByID(ctx context.Context, id string) (*db.Game, error)
 	ListGames(ctx context.Context) ([]db.Game, error)
 	SetGameState(ctx context.Context, id, state string) error
 	SetQuestionTimeout(ctx context.Context, id string, seconds int) error
+	SetGameScheduledAt(ctx context.Context, id string, scheduledAt *time.Time) error
 	ActiveQuestionGameIDs(ctx context.Context) ([]string, error)
 	DeleteGame(ctx context.Context, id string) error
 	ActivateQuestion(ctx context.Context, gameID, qID string) error
@@ -28,8 +30,8 @@ type Store interface {
 	ClearCurrentQuestion(ctx context.Context, gameID string) error
 
 	// Users
-	CreateUser(ctx context.Context, gameID, name, photoB64, token string) (*db.User, error)
-	UpdateUser(ctx context.Context, id, name, photoB64 string) error
+	CreateUser(ctx context.Context, gameID, name, photoB64, email, token string) (*db.User, error)
+	UpdateUser(ctx context.Context, id, name, photoB64, email string) error
 	UserByToken(ctx context.Context, token string) (*db.User, error)
 	DeleteUser(ctx context.Context, id string) error
 	UserByID(ctx context.Context, id string) (*db.User, error)

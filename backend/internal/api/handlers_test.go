@@ -13,6 +13,7 @@ import (
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/auth"
 	"github.com/oglimmer/trivia/backend/internal/db"
+	"github.com/oglimmer/trivia/backend/internal/mail"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
@@ -20,7 +21,7 @@ import (
 func testServer(t *testing.T) (*Server, *fakeStore) {
 	t.Helper()
 	f := newFakeStore()
-	s := New(f, ws.NewHub(), &ai.Client{})
+	s := New(f, ws.NewHub(), &ai.Client{}, &mail.Mailer{})
 	return s, f
 }
 
@@ -164,7 +165,7 @@ func TestGetGameForJoin404(t *testing.T) {
 
 func TestGetGameForJoinHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
@@ -177,7 +178,7 @@ func TestGetGameForJoinHappy(t *testing.T) {
 
 func TestJoinGameRequiresName(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -190,7 +191,7 @@ func TestJoinGameRequiresName(t *testing.T) {
 
 func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
 	w := do(t, s, req{
 		method: "POST",
@@ -204,7 +205,7 @@ func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
 
 func TestJoinGameHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -231,8 +232,8 @@ func TestMeRequiresPlayerToken(t *testing.T) {
 
 func TestMeReturnsUserAndGame(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
-	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", "", "tok-1")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", "", "", "tok-1")
 	w := do(t, s, req{method: "GET", path: "/api/me", playerTo: u.Token})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
@@ -256,7 +257,7 @@ func TestMeReturnsUserAndGame(t *testing.T) {
 
 func TestSetGameStateRejectsBad(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/state",
@@ -270,7 +271,7 @@ func TestSetGameStateRejectsBad(t *testing.T) {
 
 func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// Put two questions on the game. SortOrder starts at 0 for both via Upsert.
 	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-a", "q1?", "x", "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
@@ -314,7 +315,7 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 
 func TestRevealRequiresActiveQuestion(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/reveal",
@@ -327,7 +328,7 @@ func TestRevealRequiresActiveQuestion(t *testing.T) {
 
 func TestRevealRescoresNumberAnswers(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// One number question, three players with varying closeness.
 	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "How many?", "x", "number",
 		json.RawMessage(`[]`), json.RawMessage(`100`))
@@ -369,7 +370,7 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 
 func TestNextQuestionFinishesAtEnd(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "only", "x", "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
@@ -397,7 +398,7 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 
 func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// Force lifecycle state populated.
 	s.lockFor(g.ID)                                // populate gameLocks
 	s.scheduleAutoClose(g.ID, "q-x", 24*time.Hour) // populate autoClose

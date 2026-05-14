@@ -84,6 +84,36 @@ spec:
         - name: ANTHROPIC_MODEL
           value: {{ . | quote }}
         {{- end }}
+        - name: PUBLIC_BASE_URL
+          value: {{ .Values.publicBaseURL | quote }}
+        - name: SMTP_ENABLED
+          value: {{ .Values.smtp.enabled | quote }}
+        - name: SMTP_HOST
+          value: {{ .Values.smtp.host | quote }}
+        - name: SMTP_PORT
+          value: {{ .Values.smtp.port | quote }}
+        - name: SMTP_TLS
+          value: {{ .Values.smtp.tls | quote }}
+        - name: SMTP_STARTTLS
+          value: {{ .Values.smtp.starttls | quote }}
+        - name: SMTP_FROM
+          value: {{ .Values.smtp.from | quote }}
+        - name: SMTP_REPLY_EMAIL
+          value: {{ .Values.smtp.replyEmail | quote }}
+        - name: SMTP_REPLY_NAME
+          value: {{ .Values.smtp.replyName | quote }}
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "trivia.secretName" . }}
+              key: SMTP_USER
+              optional: true
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "trivia.secretName" . }}
+              key: SMTP_PASSWORD
+              optional: true
         startupProbe:
           httpGet:
             path: /health

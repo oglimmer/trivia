@@ -44,6 +44,22 @@
       <label>Your selfie</label>
       <PhotoPicker v-model="photo" no-frame allow-random />
 
+      <template v-if="showEmail">
+        <label for="player-email">Email (optional)</label>
+        <input
+          id="player-email"
+          v-model="email"
+          type="email"
+          placeholder="you@example.com"
+          maxlength="120"
+          autocomplete="email"
+          inputmode="email"
+        />
+        <p class="muted email-hint">
+          We'll email you a one-click link so you can rejoin from any device.
+        </p>
+      </template>
+
       <button
         class="btn-primary btn-lg btn-block"
         :disabled="!canSubmit || loading"
@@ -63,12 +79,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import { playerApi } from '@/services/api'
 import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
+
+const WAIT_NOTICE_THRESHOLD_MS = 60 * 60 * 1000
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -76,16 +94,41 @@ const store = useGameStore()
 
 const name = ref('')
 const photo = ref('')
+const email = ref('')
+const scheduledAt = ref<string | null>(null)
 const loading = ref(false)
 const err = ref('')
 
 const canSubmit = computed(() => name.value.trim().length > 0 && photo.value.length > 0)
 
+// Email is only collected here when the host hasn't scheduled a start within
+// the next hour — close-to-start joiners are already mid-flow and don't need
+// the relogin link.
+const showEmail = computed(() => {
+  if (!scheduledAt.value) return true
+  const startMs = new Date(scheduledAt.value).getTime()
+  if (isNaN(startMs)) return true
+  return startMs - Date.now() > WAIT_NOTICE_THRESHOLD_MS
+})
+
+onMounted(async () => {
+  try {
+    const g = await playerApi.getGame(props.code)
+    scheduledAt.value = g.scheduledAt ?? null
+  } catch {
+    // ignore — Join still renders; submit will surface a 404 if the code is bad.
+  }
+})
+
 async function submit() {
   err.value = ''
   loading.value = true
   try {
-    const r = await playerApi.joinGame(props.code, { name: name.value.trim(), photoB64: photo.value })
+    const r = await playerApi.joinGame(props.code, {
+      name: name.value.trim(),
+      photoB64: photo.value,
+      email: showEmail.value ? email.value.trim() : '',
+    })
     store.setMe(r.token, { id: r.userId, name: name.value.trim(), gameId: r.gameId })
     router.push(`/g/${props.code}/setup`)
   } catch (e) {
@@ -95,3 +138,10 @@ async function submit() {
   }
 }
 </script>
+
+<style scoped>
+.email-hint {
+  margin: -4px 0 0;
+  font-size: .85rem;
+}
+</style>

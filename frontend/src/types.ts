@@ -13,6 +13,7 @@ export interface User {
   id: string
   name: string
   photoB64?: string
+  email?: string
   gameId?: string
 }
 
@@ -24,6 +25,7 @@ export interface Game {
   currentQuestionId?: string | null
   questionStartedAt?: string | null
   questionTimeoutSeconds?: number
+  scheduledAt?: string | null
 }
 
 export interface Question {
@@ -96,6 +98,7 @@ export interface AdminGamesEntry {
   playerCount?: number
   onlineCount?: number
   questionTimeoutSeconds?: number
+  scheduledAt?: string | null
 }
 
 export interface ImpersonateResponse {
@@ -116,6 +119,7 @@ export interface GameStateMsg {
   currentQuestionId?: string | null
   questionStartedAt?: string | null
   questionTimeoutSeconds?: number
+  scheduledAt?: string | null
   question?: Question | null
   leaderboard?: LeaderboardEntry[]
   answers?: Answer[]

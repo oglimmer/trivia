@@ -16,6 +16,9 @@
       <label for="game-code">Code (optional)</label>
       <input id="game-code" v-model="code" placeholder="Random if blank" maxlength="8" class="mono" style="letter-spacing: .15em; text-transform: lowercase;" />
 
+      <label for="game-scheduled">Scheduled date &amp; time (optional)</label>
+      <input id="game-scheduled" v-model="scheduledAt" type="datetime-local" />
+
       <label for="game-timeout">Question timeout (seconds)</label>
       <div class="row">
         <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" />
@@ -33,6 +36,7 @@
         </div>
         <div class="game-row__meta">
           <div class="bold">{{ g.name || '(untitled)' }}</div>
+          <div v-if="g.scheduledAt" class="muted" style="font-size: .85rem;">{{ formatScheduled(g.scheduledAt) }}</div>
           <div class="row" style="gap: 8px; font-size: .85rem; align-items: center;">
             <span :class="['state-pill', `state-${g.state}`]">{{ g.state }}</span>
             <span class="presence-pill" :class="{ 'presence-pill--on': (g.onlineCount || 0) > 0 }">
@@ -67,6 +71,7 @@ import type { AdminGamesEntry } from '@/types'
 const games = ref<AdminGamesEntry[]>([])
 const code = ref('')
 const name = ref('')
+const scheduledAt = ref('')
 const timeoutSeconds = ref(30)
 const loading = ref(false)
 const deleting = ref('')
@@ -104,9 +109,11 @@ async function create() {
       code: code.value.trim().toLowerCase(),
       name: name.value,
       questionTimeoutSeconds: Number(timeoutSeconds.value) || 30,
+      scheduledAt: scheduledAt.value ? new Date(scheduledAt.value).toISOString() : null,
     })
     code.value = ''
     name.value = ''
+    scheduledAt.value = ''
     timeoutSeconds.value = 30
     router.push(`/admin/games/${g.code}`)
   } catch (e) {
@@ -114,6 +121,15 @@ async function create() {
   } finally {
     loading.value = false
   }
+}
+
+function formatScheduled(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 async function remove(g: AdminGamesEntry) {

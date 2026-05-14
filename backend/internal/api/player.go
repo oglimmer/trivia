@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -15,9 +16,10 @@ func (s *Server) getGameForJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"code":  g.Code,
-		"name":  g.Name,
-		"state": g.State,
+		"code":        g.Code,
+		"name":        g.Name,
+		"state":       g.State,
+		"scheduledAt": g.ScheduledAt,
 	})
 }
 
@@ -25,12 +27,14 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Name     string `json:"name"`
 		PhotoB64 string `json:"photoB64"`
+		Email    string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
 		return
 	}
 	b.Name = strings.TrimSpace(b.Name)
+	b.Email = strings.TrimSpace(b.Email)
 	if b.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name required")
 		return
@@ -43,10 +47,13 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "game not in setup")
 		return
 	}
-	u, err := s.DB.CreateUser(r.Context(), g.ID, b.Name, b.PhotoB64, randomToken(16))
+	u, err := s.DB.CreateUser(r.Context(), g.ID, b.Name, b.PhotoB64, b.Email, randomToken(16))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if b.Email != "" {
+		s.sendLoginLink(u.Email, u.Name, g.Name, g.Code, u.Token)
 	}
 	s.broadcastUsers(r.Context(), g.ID)
 	writeJSON(w, 200, map[string]any{
@@ -55,6 +62,20 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 		"gameId": g.ID,
 		"code":   g.Code,
 	})
+}
+
+// sendLoginLink fires off the magic-link email in the background so the
+// response doesn't wait on the SMTP server. Errors are logged but never
+// surfaced to the caller — a flaky mail server shouldn't block joining.
+func (s *Server) sendLoginLink(email, playerName, gameName, gameCode, token string) {
+	if s.Mail == nil || email == "" {
+		return
+	}
+	go func() {
+		if err := s.Mail.SendLoginLink(email, playerName, gameName, gameCode, token); err != nil {
+			log.Printf("send login link to %q: %v", email, err)
+		}
+	}()
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
@@ -79,18 +100,35 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Name     string `json:"name"`
 		PhotoB64 string `json:"photoB64"`
+		Email    string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
 		return
 	}
-	if strings.TrimSpace(b.Name) == "" {
+	b.Name = strings.TrimSpace(b.Name)
+	b.Email = strings.TrimSpace(b.Email)
+	if b.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name required")
 		return
 	}
-	if err := s.DB.UpdateUser(r.Context(), u.ID, b.Name, b.PhotoB64); err != nil {
+	prevEmail := u.Email
+	if err := s.DB.UpdateUser(r.Context(), u.ID, b.Name, b.PhotoB64, b.Email); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// Send the magic link only when the email is freshly set or changed —
+	// no-op renames shouldn't spam the mailbox.
+	if b.Email != "" && b.Email != prevEmail {
+		g, gerr := s.DB.GameByID(r.Context(), u.GameID)
+		gameName, gameCode := "", ""
+		if gerr == nil && g != nil {
+			gameName, gameCode = g.Name, g.Code
+		}
+		tok, terr := s.DB.UserTokenByID(r.Context(), u.ID)
+		if terr == nil {
+			s.sendLoginLink(b.Email, b.Name, gameName, gameCode, tok)
+		}
 	}
 	s.broadcastUsers(r.Context(), u.GameID)
 	w.WriteHeader(204)

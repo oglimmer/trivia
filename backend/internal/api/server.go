@@ -8,14 +8,16 @@ import (
 
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/game"
+	"github.com/oglimmer/trivia/backend/internal/mail"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
 // Server is the HTTP API plus the live WebSocket hub.
 type Server struct {
-	DB  Store
-	Hub *ws.Hub
-	AI  *ai.Client
+	DB   Store
+	Hub  *ws.Hub
+	AI   *ai.Client
+	Mail *mail.Mailer
 
 	// gameLocks serializes admin transitions per game.
 	mu        sync.Mutex
@@ -27,9 +29,12 @@ type Server struct {
 	autoClose   map[string]*time.Timer
 }
 
-func New(d Store, h *ws.Hub, c *ai.Client) *Server {
+func New(d Store, h *ws.Hub, c *ai.Client, m *mail.Mailer) *Server {
+	if m == nil {
+		m = &mail.Mailer{}
+	}
 	s := &Server{
-		DB: d, Hub: h, AI: c,
+		DB: d, Hub: h, AI: c, Mail: m,
 		gameLocks: map[string]*sync.Mutex{},
 		autoClose: map[string]*time.Timer{},
 	}

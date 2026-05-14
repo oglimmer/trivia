@@ -9,7 +9,7 @@ import type {
   User,
 } from '@/types'
 
-export interface JoinBody { name: string; photoB64?: string }
+export interface JoinBody { name: string; photoB64?: string; email?: string }
 export interface QuestionBody {
   text: string
   photoB64: string

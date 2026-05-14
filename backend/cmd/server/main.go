@@ -15,6 +15,7 @@ import (
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/api"
 	"github.com/oglimmer/trivia/backend/internal/db"
+	"github.com/oglimmer/trivia/backend/internal/mail"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
@@ -36,7 +37,7 @@ func main() {
 	}
 
 	hub := ws.NewHub()
-	srv := api.New(d, hub, ai.New())
+	srv := api.New(d, hub, ai.New(), mail.FromEnv())
 	srv.ResumeAutoCloseTimers(ctx)
 
 	corsMW := cors.Handler(cors.Options{

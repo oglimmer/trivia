@@ -10,6 +10,26 @@ publicBaseURL: "https://trivia.oglimmer.com"
 anthropic:
   model: "claude-sonnet-4-6"
 
+# Outbound SMTP for the player magic-link emails. Disabled by default — when
+# off, the backend logs the login URL instead so dev/test flows still work.
+# User/Password live in the sealed secret under SMTP_USER / SMTP_PASSWORD if
+# the relay needs auth; leave the keys empty otherwise. tls and starttls are
+# mutually exclusive — pick the one the relay expects.
+#   tls=true       → implicit TLS (SMTPS, typically port 465)
+#   starttls=true  → required STARTTLS upgrade (typically port 587)
+#   both false     → plain SMTP, NO TLS attempted (use only for anonymous
+#                    relays on a trusted network; Go's PlainAuth refuses to
+#                    send credentials over plaintext, so auth won't work)
+smtp:
+  enabled: true
+  host: "192.168.178.52"
+  port: 25
+  tls: false
+  starttls: false
+  from: "noreply@oglimmer.com"
+  replyEmail: "noreply@oglimmer.com"
+  replyName: "Trivia-Helper"
+
 # Backend (API + WebSocket) configuration
 backend:
   name: api
@@ -57,7 +77,7 @@ postgres:
   enabled: true
   image:
     repository: postgres
-    tag: "18-alpine"
+    tag: "16-alpine"
     pullPolicy: IfNotPresent
   user: trivia
   database: trivia

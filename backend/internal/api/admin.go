@@ -43,9 +43,10 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 // ---------- admin games ----------
 
 type createGameBody struct {
-	Code                   string `json:"code"`
-	Name                   string `json:"name"`
-	QuestionTimeoutSeconds int    `json:"questionTimeoutSeconds"`
+	Code                   string     `json:"code"`
+	Name                   string     `json:"name"`
+	QuestionTimeoutSeconds int        `json:"questionTimeoutSeconds"`
+	ScheduledAt            *time.Time `json:"scheduledAt"`
 }
 
 func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +68,7 @@ func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 			"questionStartedAt":      g.QuestionStartedAt,
 			"questionClosedAt":       g.QuestionClosedAt,
 			"questionTimeoutSeconds": g.QuestionTimeoutSeconds,
+			"scheduledAt":            g.ScheduledAt,
 			"createdAt":              g.CreatedAt,
 			"onlineCount":            counts[g.ID],
 		})
@@ -93,7 +95,7 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 	if b.Code == "" {
 		b.Code = randomCode()
 	}
-	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds))
+	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds), b.ScheduledAt)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -242,8 +244,11 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
+	// json.RawMessage lets us tell "field absent" from "explicit null" — clearing
+	// the scheduled date is a real action and must be representable.
 	var b struct {
-		QuestionTimeoutSeconds int `json:"questionTimeoutSeconds"`
+		QuestionTimeoutSeconds *int            `json:"questionTimeoutSeconds"`
+		ScheduledAt            json.RawMessage `json:"scheduledAt"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
@@ -256,12 +261,30 @@ func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
 	// Lock the value once players are in the game, so a mid-game change can't
 	// mismatch the timer that is already running.
 	if g.State != "setup" {
-		writeErr(w, http.StatusBadRequest, "timeout can only be changed in setup")
+		writeErr(w, http.StatusBadRequest, "settings can only be changed in setup")
 		return
 	}
-	if err := s.DB.SetQuestionTimeout(r.Context(), g.ID, clampTimeout(b.QuestionTimeoutSeconds)); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+	if b.QuestionTimeoutSeconds != nil {
+		if err := s.DB.SetQuestionTimeout(r.Context(), g.ID, clampTimeout(*b.QuestionTimeoutSeconds)); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if len(b.ScheduledAt) > 0 {
+		var sched *time.Time
+		raw := strings.TrimSpace(string(b.ScheduledAt))
+		if raw != "null" {
+			var t time.Time
+			if err := json.Unmarshal(b.ScheduledAt, &t); err != nil {
+				writeErr(w, http.StatusBadRequest, "scheduledAt must be RFC3339 timestamp or null")
+				return
+			}
+			sched = &t
+		}
+		if err := s.DB.SetGameScheduledAt(r.Context(), g.ID, sched); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)

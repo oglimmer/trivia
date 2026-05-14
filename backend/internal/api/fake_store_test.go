@@ -47,7 +47,7 @@ func (f *fakeStore) nextID(prefix string) string {
 
 // ---- Games ----
 
-func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int) (*db.Game, error) {
+func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int, scheduledAt *time.Time) (*db.Game, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, g := range f.games {
@@ -62,6 +62,7 @@ func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int
 		State:                  "setup",
 		QuestionState:          "idle",
 		QuestionTimeoutSeconds: timeout,
+		ScheduledAt:            scheduledAt,
 		CreatedAt:              f.now(),
 	}
 	f.games[g.ID] = g
@@ -119,6 +120,22 @@ func (f *fakeStore) SetQuestionTimeout(_ context.Context, id string, seconds int
 		return db.ErrNotFound
 	}
 	g.QuestionTimeoutSeconds = seconds
+	return nil
+}
+
+func (f *fakeStore) SetGameScheduledAt(_ context.Context, id string, scheduledAt *time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g, ok := f.games[id]
+	if !ok {
+		return db.ErrNotFound
+	}
+	if scheduledAt == nil {
+		g.ScheduledAt = nil
+	} else {
+		v := *scheduledAt
+		g.ScheduledAt = &v
+	}
 	return nil
 }
 
@@ -196,7 +213,7 @@ func (f *fakeStore) ClearCurrentQuestion(_ context.Context, gameID string) error
 
 // ---- Users ----
 
-func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, token string) (*db.User, error) {
+func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, email, token string) (*db.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	u := &db.User{
@@ -204,6 +221,7 @@ func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, token 
 		GameID:    gameID,
 		Name:      name,
 		PhotoB64:  photoB64,
+		Email:     email,
 		Token:     token,
 		CreatedAt: f.now(),
 	}
@@ -211,7 +229,7 @@ func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, token 
 	return cloneUser(u), nil
 }
 
-func (f *fakeStore) UpdateUser(_ context.Context, id, name, photoB64 string) error {
+func (f *fakeStore) UpdateUser(_ context.Context, id, name, photoB64, email string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	u, ok := f.users[id]
@@ -220,6 +238,7 @@ func (f *fakeStore) UpdateUser(_ context.Context, id, name, photoB64 string) err
 	}
 	u.Name = name
 	u.PhotoB64 = photoB64
+	u.Email = email
 	return nil
 }
 
@@ -496,6 +515,10 @@ func cloneGame(g *db.Game) *db.Game {
 	if g.QuestionClosedAt != nil {
 		v := *g.QuestionClosedAt
 		c.QuestionClosedAt = &v
+	}
+	if g.ScheduledAt != nil {
+		v := *g.ScheduledAt
+		c.ScheduledAt = &v
 	}
 	return &c
 }

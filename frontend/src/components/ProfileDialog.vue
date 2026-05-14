@@ -30,6 +30,20 @@
         <label>Selfie</label>
         <PhotoPicker v-model="photo" no-frame allow-random />
 
+        <label for="profile-dlg-email">Email (optional)</label>
+        <input
+          id="profile-dlg-email"
+          v-model="email"
+          type="email"
+          maxlength="120"
+          placeholder="you@example.com"
+          autocomplete="email"
+          inputmode="email"
+        />
+        <p class="muted profile-dlg__email-hint">
+          We email a one-click link so you can rejoin from any device.
+        </p>
+
         <div v-if="err" class="error">{{ err }}</div>
 
         <div class="dialog__actions">
@@ -65,6 +79,7 @@ const store = useGameStore()
 
 const name = ref('')
 const photo = ref('')
+const email = ref('')
 const err = ref('')
 const saving = ref(false)
 const nameEl = ref<HTMLInputElement | null>(null)
@@ -74,7 +89,10 @@ const canSave = computed(() => {
   if (!trimmed) return false
   const curName = store.me?.name || ''
   const curPhoto = store.me?.photoB64 || ''
-  return trimmed !== curName || photo.value !== curPhoto
+  const curEmail = store.me?.email || ''
+  return trimmed !== curName
+    || photo.value !== curPhoto
+    || email.value.trim() !== curEmail
 })
 
 // Reset fields when opening; useModal handles focus + body scroll.
@@ -82,6 +100,7 @@ watch(() => props.open, (v) => {
   if (v) {
     name.value = store.me?.name || ''
     photo.value = store.me?.photoB64 || ''
+    email.value = store.me?.email || ''
     err.value = ''
     saving.value = false
   }
@@ -99,8 +118,9 @@ async function save() {
   saving.value = true
   try {
     const newName = name.value.trim()
-    await playerApi.updateMe({ name: newName, photoB64: photo.value })
-    store.updateMe({ name: newName, photoB64: photo.value })
+    const newEmail = email.value.trim()
+    await playerApi.updateMe({ name: newName, photoB64: photo.value, email: newEmail })
+    store.updateMe({ name: newName, photoB64: photo.value, email: newEmail })
     emit('close')
   } catch (e) {
     err.value = errMsg(e, 'Could not save')
@@ -122,5 +142,9 @@ async function save() {
   place-items: center;
   font-size: 2.4rem;
   background: var(--cream-2);
+}
+.profile-dlg__email-hint {
+  margin: -4px 0 0;
+  font-size: .85rem;
 }
 </style>

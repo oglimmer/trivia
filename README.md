@@ -2,7 +2,7 @@
 
 Mobile-first, real-time trivia game. Players upload a photo and a question; the host runs the round; everyone answers live; scores are revealed with a podium finish.
 
-Stack: **Vue 3 + Vite + TypeScript** (frontend), **Go** (backend, chi + gorilla/websocket + pgx), **Postgres 18**. Single Docker Compose for local dev; a Helm chart ships the same app to Kubernetes. Live updates via WebSocket — no page refreshes.
+Stack: **Vue 3 + Vite + TypeScript** (frontend), **Go** (backend, chi + gorilla/websocket + pgx), **Postgres**. Single Docker Compose for local dev; a Helm chart ships the same app to Kubernetes. Live updates via WebSocket — no page refreshes. Optional SMTP integration sends players a one-click login link so they can rejoin a game on any device.
 
 ## Quick start
 
@@ -27,14 +27,25 @@ The backend auto-runs `migrations/*.sql` on boot. Re-running them is safe (every
 | `POSTGRES_*`         | `trivia/trivia/trivia`      | DB credentials and host.                         |
 | `BACKEND_PORT`       | `8080`                      | Host port for the API.                           |
 | `FRONTEND_PORT`      | `5173`                      | Host port for the nginx-served Vue app.          |
+| `PUBLIC_BASE_URL`    | `http://localhost:5173`     | Origin used to build the magic-link URL in emails. Helm sets it from `publicBaseURL`. |
+| `SMTP_ENABLED`       | `false`                     | When `false`, the backend just logs the magic-link URL instead of sending — dev/test flows still work without a relay. |
+| `SMTP_HOST`          | (empty)                     | SMTP relay hostname.                             |
+| `SMTP_PORT`          | `25`                        | SMTP relay port (typical: 25 plain, 587 STARTTLS, 465 implicit TLS). |
+| `SMTP_TLS`           | `false`                     | Implicit TLS (SMTPS). Mutually exclusive with STARTTLS. |
+| `SMTP_STARTTLS`      | `false`                     | Require STARTTLS upgrade. Fails closed if the server doesn't advertise it. With both `SMTP_TLS` and `SMTP_STARTTLS` false, no TLS is attempted (even if the server advertises STARTTLS) — use only for anonymous relays on a trusted network. |
+| `SMTP_USER`          | (empty)                     | Optional PLAIN-auth username. Go's stdlib refuses to send credentials over a plaintext non-localhost connection, so pair this with TLS or STARTTLS. |
+| `SMTP_PASSWORD`      | (empty)                     | Password to pair with `SMTP_USER`.               |
+| `SMTP_FROM`          | `noreply@oglimmer.com`      | RFC 5322 `From:` address.                        |
+| `SMTP_REPLY_EMAIL`   | `noreply@oglimmer.com`      | `Reply-To:` address.                             |
+| `SMTP_REPLY_NAME`    | `Trivia-Helper`             | Display name for the reply address.              |
 
 The frontend proxies `/api` and `/ws` to the backend via nginx (prod) and Vite (dev), so the app is served from a single origin.
 
 ## How it works
 
-A **game** is created by the admin with a short code (e.g. `abc1`) and an answer window in seconds (default 30, range 5–600). It moves through three states:
+A **game** is created by the admin with a short code (e.g. `abc1`), an answer window in seconds (default 30, range 5–600), and an optional **scheduled start** (date + time). The schedule is informational — the host still presses ▶ to start the game — but it changes the player UX (see "Scheduled start & magic-link login" below). It moves through three states:
 
-1. **setup** — players join with name + photo, then submit one question each (photo + text + answers). Players can revise their question and edit their own name/photo until the host moves on. The host can remove individual players or their questions in this state, and can change the answer window for the whole game.
+1. **setup** — players join with name + photo, then submit one question each (photo + text + answers). Players can revise their question and edit their own name/photo until the host moves on. The host can remove individual players or their questions in this state, and can change the answer window or scheduled start for the whole game.
 2. **game** — the host runs through every question in randomized order. Per question:
    - host **activates** it → players see it and submit answers (within the game's answer window for full time bonus)
    - host **reveals** → everyone sees the correct answer and a per-round result card. The server also auto-reveals when the timer expires, so a distracted host can't strand players forever.
@@ -67,6 +78,24 @@ timeBonus = base × 0.5 × max(0, 1 − responseMs / windowMs)
 
 See `backend/internal/game/scoring.go` and `scoring_test.go`.
 
+### Scheduled start & magic-link login
+
+If the admin sets a **scheduled start** time on a game, the player UX adapts to it. A single threshold drives the behavior:
+
+```
+WITHIN_THRESHOLD = scheduledAt − now ≤ 60 min
+```
+
+| Surface                               | Within threshold (or no schedule set) | Outside threshold (≥ 60 min away) |
+| ------------------------------------- | ------------------------------------- | --------------------------------- |
+| Join page (`/g/:code/join`)           | Name + photo only.                    | Name + photo + **optional email**. |
+| "Locked in" screen (post-submit)      | Bold wait notice ("If you wait here, you will still participate…"). | Inline pitch to drop an email and get a one-click rejoin link. |
+| Profile edit dialog                   | Email field always visible & editable. | Same. |
+
+When a player provides a non-empty email (at join, on the locked-in screen, or via the profile dialog), the backend sends a **magic-link email** in the background. The link reuses the existing admin "impersonate" deep-link format — `https://<PUBLIC_BASE_URL>/impersonate#token=<playerToken>` — so there's no separate one-time-token table; the link is valid as long as the player's token is. If `SMTP_ENABLED=false`, the URL is logged to stdout instead, which is enough for dev/test.
+
+The 60-minute threshold and the relogin pitch are deliberate: a player who joins right before kickoff is already mid-flow and doesn't need the email; a player who pre-joins hours early will close the tab and needs a way back in.
+
 ## Project layout
 
 ```
@@ -82,10 +111,13 @@ trivia/
 │   │   ├── ai/         # Claude proxy for the suggest button
 │   │   ├── db/         # pgx pool + queries + migrations runner
 │   │   ├── game/       # scoring (pure functions, unit tested)
+│   │   ├── mail/       # SMTP magic-link sender (no-op when SMTP_ENABLED=false)
 │   │   └── ws/         # generic websocket hub
 │   └── migrations/
 │       ├── 0001_init.sql
-│       └── 0002_question_timeout.sql
+│       ├── 0002_question_timeout.sql
+│       ├── 0003_game_scheduled_at.sql
+│       └── 0004_user_email.sql
 ├── frontend/
 │   ├── nginx.conf
 │   └── src/
@@ -124,28 +156,50 @@ The `oglimmer.sh` helper at the repo root wraps the common loops: `./oglimmer.sh
 The `helm/trivia` chart deploys backend + frontend + (optional) bundled Postgres behind ingress-nginx with cert-manager-issued TLS. WebSockets ride the same origin over `/ws`; the chart's ingress annotations disable response buffering and bump the read/send timeouts so streams stay alive.
 
 ```bash
-# 1. Seal the cluster secrets (one-time, against your kubeseal controller):
+# 1. Seal the cluster secrets (one-time, against your kubeseal controller).
+#    SMTP_USER / SMTP_PASSWORD are optional — only add them if your relay
+#    requires PLAIN auth.
 kubectl create secret generic trivia-secret \
   --namespace default --dry-run=client -o yaml \
   --from-literal=POSTGRES_PASSWORD=$(openssl rand -hex 16) \
   --from-literal=JWT_SECRET=$(openssl rand -hex 32) \
   --from-literal=ADMIN_PASSWORD=<choose> \
   --from-literal=ANTHROPIC_API_KEY=<sk-ant-...> \
+  --from-literal=SMTP_USER=<relay-username> \
+  --from-literal=SMTP_PASSWORD=<relay-password> \
   | kubeseal --format yaml > helm/trivia/templates/sealed-secret.yaml
 
 # 2. Install
 helm install trivia ./helm/trivia
 ```
 
-Key `values.yaml` knobs: `publicBaseURL`, `anthropic.model`, `backend.image` / `frontend.image` (default `registry.oglimmer.com/trivia-{backend,frontend}:latest`), `postgres.enabled` (toggle off to point at `externalPostgres.host` instead), `ingress.hosts` / `ingress.tls`. The default cert-manager issuer is `oglimmer-com-dns` (DNS-01); change `ingress.annotations.cert-manager.io/cluster-issuer` and `ingress.tls[].secretName` for your own setup. See `helm/trivia/README.md` for more.
+Key `values.yaml` knobs: `publicBaseURL`, `anthropic.model`, `backend.image` / `frontend.image` (default `registry.oglimmer.com/trivia-{backend,frontend}:latest`), `postgres.enabled` (toggle off to point at `externalPostgres.host` instead), `postgres.image.tag` (pinned at `16-alpine`; bumping it is a major Postgres upgrade — see the comment in `values.yaml` and don't do it without a dump/restore plan), `ingress.hosts` / `ingress.tls`. The default cert-manager issuer is `oglimmer-com-dns` (DNS-01); change `ingress.annotations.cert-manager.io/cluster-issuer` and `ingress.tls[].secretName` for your own setup. See `helm/trivia/README.md` for more.
+
+#### Enabling SMTP
+
+The `smtp` block in `values.yaml` controls the magic-link sender. Three transport modes are supported, pick the one your relay expects:
+
+```yaml
+smtp:
+  enabled: true
+  host: "smtp.example.com"
+  port: 587            # 25 plain | 587 STARTTLS | 465 implicit TLS
+  tls: false           # implicit TLS (SMTPS). mutually exclusive with starttls
+  starttls: true       # require STARTTLS upgrade
+  from: "noreply@example.com"
+  replyEmail: "noreply@example.com"
+  replyName: "Trivia-Helper"
+```
+
+`SMTP_USER` / `SMTP_PASSWORD` come from the sealed secret as `optional` keys — the deployment renders without them when the relay is anonymous. With `smtp.enabled=false` (default), the backend keeps logging the magic-link URL to stdout, which is enough for staging or for verifying the rest of the flow before pointing at a real relay.
 
 ## API reference (short)
 
 Public:
-- `GET  /api/games/{code}` — basic game info for the join screen
-- `POST /api/games/{code}/join` — `{name, photoB64}` → `{token, userId, gameId, code}`
+- `GET  /api/games/{code}` — basic game info for the join screen, including `scheduledAt` (so the join page can decide whether to ask for an email)
+- `POST /api/games/{code}/join` — `{name, photoB64, email?}` → `{token, userId, gameId, code}`. A non-empty `email` triggers a magic-link send.
 - `GET  /api/me` — `X-Player-Token` header → `{user, game}`
-- `PUT  /api/me` — `{name, photoB64}` (player edits own profile)
+- `PUT  /api/me` — `{name, photoB64, email?}` (player edits own profile). Magic-link only fires when `email` is newly set or changes — repeat saves don't spam.
 - `GET  /api/games/{code}/users` — list of joined players
 - `GET  /api/games/{code}/questions` — questions for the game (`correct` only included once the game is `finished`)
 - `PUT  /api/games/{code}/questions` — submit/update the player's question
@@ -154,11 +208,11 @@ Public:
 
 Admin (`Authorization: Bearer <jwt>`):
 - `POST   /api/admin/login` — `{password}` → `{token}`
-- `GET    /api/admin/games`, `POST /api/admin/games` (`{code?, name, questionTimeoutSeconds?}`)
+- `GET    /api/admin/games`, `POST /api/admin/games` (`{code?, name, questionTimeoutSeconds?, scheduledAt?}` — `scheduledAt` is an RFC 3339 timestamp string, omit/null for no schedule)
 - `GET    /api/admin/games/{code}`
 - `DELETE /api/admin/games/{code}` — drops the game; connected clients get a `gameDeleted` frame
 - `POST   /api/admin/games/{code}/state` — `{state: "setup"|"game"|"finished"}`
-- `PUT    /api/admin/games/{code}/settings` — `{questionTimeoutSeconds}` (setup only)
+- `PUT    /api/admin/games/{code}/settings` — `{questionTimeoutSeconds?, scheduledAt?: string|null}` (setup only). Each field is optional and treated independently: omit to leave unchanged, send `null` for `scheduledAt` to clear it.
 - `POST   /api/admin/games/{code}/activate` — optional `{questionId}` (else next by sort order)
 - `POST   /api/admin/games/{code}/reveal`
 - `POST   /api/admin/games/{code}/next`
@@ -176,7 +230,7 @@ Inbound (from client):
 - `{type:"ping"}` → `{type:"pong"}`.
 
 Outbound (from server):
-- `gameState` — the current view, including `questionTimeoutSeconds` and `serverNow` so the client can compute clock skew for an accurate countdown. Admins additionally get `correct` and `questionsAdmin`.
+- `gameState` — the current view, including `questionTimeoutSeconds`, `scheduledAt`, and `serverNow` so the client can compute clock skew for an accurate countdown. Admins additionally get `correct` and `questionsAdmin`.
 - `users` — list of joined players (no tokens).
 - `presence` — admin only; `{online: [userId, ...]}` of players with at least one live connection. Sent on every player join/leave.
 - `playerAnswered` — admin only; fires as each player submits.
@@ -195,11 +249,12 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 - **Players see only their own answer ack** during a round, not who else has answered (admin sees the live tally). Avoids social pressure / spoilers.
 - **All answers shown on reveal**, not just the correct ones — more transparent and lets losers see how close they were.
 - **Number scoring is rank-based**, not threshold-based. A whole field of bad guesses still produces a podium; lone perfect guesses still win cleanly because of the exact-tolerance branch.
+- **Magic-link login reuses the player token directly** (`/impersonate#token=…`) rather than issuing a separate one-time token. No new table, no expiry logic — the link is exactly as valuable as the cookie that already lives in the player's other browser. Trade-off: forwarding the email forwards the session. Acceptable for a casual party app; not what you'd ship for a payments product.
 
 ### Real gaps & nice-to-haves
 
 - **No HTTPS / WSS in the compose setup**. Fine for LAN play; the Helm chart terminates TLS at ingress for prod.
-- **No rate limiting** on `/api/games/{code}/join` or `/api/ai/suggest` — both are spammable. Add a per-IP token bucket if exposing publicly.
+- **No rate limiting** on `/api/games/{code}/join`, `/api/ai/suggest`, or magic-link sends triggered via `PUT /api/me` — all spammable. Add a per-IP / per-game token bucket if exposing publicly.
 - **JWT secret defaults to a dev value** if `JWT_SECRET` is unset. Loud-fail on startup would be safer.
 - **No tests for the WebSocket layer** beyond a manual smoke script. Worth adding an integration test that boots a real `httptest.Server` + pgx with `testcontainers`.
 - **Migrations are idempotent `*.sql` files**, not versioned with a tool like `goose`/`atlas`. Adding a column today is fine; renaming one needs a tool.

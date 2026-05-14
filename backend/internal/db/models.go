@@ -16,6 +16,7 @@ type Game struct {
 	QuestionStartedAt      *time.Time `json:"questionStartedAt,omitempty"`
 	QuestionClosedAt       *time.Time `json:"questionClosedAt,omitempty"`
 	QuestionTimeoutSeconds int        `json:"questionTimeoutSeconds"`
+	ScheduledAt            *time.Time `json:"scheduledAt,omitempty"`
 	CreatedAt              time.Time  `json:"createdAt"`
 }
 
@@ -24,6 +25,7 @@ type User struct {
 	GameID    string    `json:"gameId"`
 	Name      string    `json:"name"`
 	PhotoB64  string    `json:"photoB64,omitempty"`
+	Email     string    `json:"email,omitempty"`
 	Token     string    `json:"token,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }

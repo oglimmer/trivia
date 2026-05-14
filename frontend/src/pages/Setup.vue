@@ -9,6 +9,36 @@
         <div style="font-size: 3rem; line-height: 1;">🎉</div>
         <h1>Locked in!</h1>
         <p>Your question is ready. Sit tight — the host kicks things off in a moment.</p>
+
+        <div v-if="offerEmail" class="email-offer stack">
+          <p class="email-offer__lead">
+            <strong>Got a minute?</strong> The game won't start for a while. Drop us your email
+            and we'll send a one-click link so you can rejoin from any device.
+          </p>
+          <label for="locked-email" class="sr-only">Email</label>
+          <div class="row" style="gap: 8px;">
+            <input
+              id="locked-email"
+              v-model="lockedEmail"
+              type="email"
+              placeholder="you@example.com"
+              maxlength="120"
+              autocomplete="email"
+              inputmode="email"
+              style="flex: 1;"
+            />
+            <button
+              class="btn-primary"
+              :disabled="!lockedEmailValid || savingEmail"
+              @click="saveLockedEmail"
+            >
+              {{ savingEmail ? '…' : 'Send link' }}
+            </button>
+          </div>
+          <div v-if="emailErr" class="error">{{ emailErr }}</div>
+          <div v-if="emailSent" class="email-offer__sent">Link sent! Check your inbox.</div>
+        </div>
+
         <button class="btn-ghost" @click="startEdit">← Edit my question</button>
       </div>
 
@@ -20,7 +50,7 @@
         <p class="muted" style="margin-top: 16px;">
           Start with a photo of whatever your question is about.
         </p>
-        <p class="muted" style="margin-top: 8px;">
+        <p v-if="showWaitNotice" class="wait-notice">
           If you wait here, you will still participate in the game when it starts.
         </p>
 
@@ -185,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import Stepper from '@/components/Stepper.vue'
@@ -213,8 +243,35 @@ const aiBusy = ref(false)
 const aiConfirm = ref(false)
 const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
 const initialReady = ref(false)
+const nowMs = ref(Date.now())
+let clockTimer: ReturnType<typeof setInterval> | null = null
+
+const lockedEmail = ref('')
+const savingEmail = ref(false)
+const emailSent = ref(false)
+const emailErr = ref('')
 
 const users = computed(() => store.users)
+
+const WAIT_NOTICE_THRESHOLD_MS = 60 * 60 * 1000
+
+// Without a scheduled start, the host kicks off at will so the wait notice
+// always applies. With one, only show it once we're within the threshold so
+// players don't sit on the page for hours.
+const withinThreshold = computed(() => {
+  const sched = store.game?.scheduledAt
+  if (!sched) return true
+  const startMs = new Date(sched).getTime()
+  if (isNaN(startMs)) return true
+  const serverNow = nowMs.value + store.serverClockOffsetMs
+  return startMs - serverNow <= WAIT_NOTICE_THRESHOLD_MS
+})
+const showWaitNotice = withinThreshold
+
+// Email pitch only makes sense outside the threshold (player is going to walk
+// away) and only if they haven't already given one.
+const offerEmail = computed(() => !withinThreshold.value && !(store.me?.email || '').trim() && !emailSent.value)
+const lockedEmailValid = computed(() => /.+@.+\..+/.test(lockedEmail.value.trim()))
 
 const hasContent = computed(() => {
   if (text.value.trim()) return true
@@ -259,6 +316,11 @@ onMounted(async () => {
 
   await nextTick()
   initialReady.value = true
+  clockTimer = setInterval(() => { nowMs.value = Date.now() }, 15_000)
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
 })
 
 watch(() => store.game && store.game.state, (s) => {
@@ -349,6 +411,25 @@ async function save() {
   }
 }
 
+async function saveLockedEmail() {
+  emailErr.value = ''
+  savingEmail.value = true
+  try {
+    const trimmed = lockedEmail.value.trim()
+    await playerApi.updateMe({
+      name: store.me?.name || '',
+      photoB64: store.me?.photoB64 || '',
+      email: trimmed,
+    })
+    store.updateMe({ email: trimmed })
+    emailSent.value = true
+  } catch (e) {
+    emailErr.value = errMsg(e, 'Could not save email')
+  } finally {
+    savingEmail.value = false
+  }
+}
+
 function requestAI() {
   if (hasContent.value) { aiConfirm.value = true; return }
   confirmAI()
@@ -377,3 +458,47 @@ async function confirmAI() {
   }
 }
 </script>
+
+<style scoped>
+.wait-notice {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--yellow);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.email-offer {
+  margin-top: 8px;
+  padding: 14px;
+  background: var(--paper, #fff);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: 3px 3px 0 var(--ink);
+  text-align: left;
+  width: 100%;
+}
+.email-offer__lead {
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+.email-offer__sent {
+  font-weight: 800;
+  color: var(--ink);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>

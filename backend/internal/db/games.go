@@ -3,26 +3,27 @@ package db
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 const gameColumns = `id, code, name, state, current_question_id, question_state,
-	question_started_at, question_closed_at, question_timeout_seconds, created_at`
+	question_started_at, question_closed_at, question_timeout_seconds, scheduled_at, created_at`
 
 func scanGame(row pgx.Row, g *Game) error {
 	return row.Scan(&g.ID, &g.Code, &g.Name, &g.State, &g.CurrentQuestionID,
 		&g.QuestionState, &g.QuestionStartedAt, &g.QuestionClosedAt,
-		&g.QuestionTimeoutSeconds, &g.CreatedAt)
+		&g.QuestionTimeoutSeconds, &g.ScheduledAt, &g.CreatedAt)
 }
 
-func (d *DB) CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int) (*Game, error) {
+func (d *DB) CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time) (*Game, error) {
 	g := &Game{}
 	row := d.Pool.QueryRow(ctx, `
-		INSERT INTO games(code, name, question_timeout_seconds)
-		VALUES ($1, $2, $3)
+		INSERT INTO games(code, name, question_timeout_seconds, scheduled_at)
+		VALUES ($1, $2, $3, $4)
 		RETURNING `+gameColumns,
-		code, name, questionTimeoutSeconds)
+		code, name, questionTimeoutSeconds, scheduledAt)
 	if err := scanGame(row, g); err != nil {
 		return nil, err
 	}
@@ -77,6 +78,11 @@ func (d *DB) SetGameState(ctx context.Context, id, state string) error {
 
 func (d *DB) SetQuestionTimeout(ctx context.Context, id string, seconds int) error {
 	_, err := d.Pool.Exec(ctx, `UPDATE games SET question_timeout_seconds=$1 WHERE id=$2`, seconds, id)
+	return err
+}
+
+func (d *DB) SetGameScheduledAt(ctx context.Context, id string, scheduledAt *time.Time) error {
+	_, err := d.Pool.Exec(ctx, `UPDATE games SET scheduled_at=$1 WHERE id=$2`, scheduledAt, id)
 	return err
 }
 

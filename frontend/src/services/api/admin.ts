@@ -8,8 +8,12 @@ import type {
   Question,
 } from '@/types'
 
-export interface CreateGameBody { code?: string; name: string; questionTimeoutSeconds?: number }
-export interface UpdateSettingsBody { questionTimeoutSeconds?: number }
+export interface CreateGameBody { code?: string; name: string; questionTimeoutSeconds?: number; scheduledAt?: string | null }
+export interface UpdateSettingsBody {
+  questionTimeoutSeconds?: number
+  // string -> set; null -> clear; omit -> leave unchanged.
+  scheduledAt?: string | null
+}
 
 export const adminApi = {
   login: (password: string) => request<{ token: string }>('POST', '/admin/login', { password }),

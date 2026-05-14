@@ -22,6 +22,7 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 			"currentQuestionId":      g.CurrentQuestionID,
 			"questionStartedAt":      g.QuestionStartedAt,
 			"questionTimeoutSeconds": g.QuestionTimeoutSeconds,
+			"scheduledAt":            g.ScheduledAt,
 			// serverNow lets clients compute their clock offset vs. the server
 			// so the question countdown stays accurate regardless of local clock skew.
 			"serverNow": time.Now().UTC(),
