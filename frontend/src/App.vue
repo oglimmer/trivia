@@ -19,7 +19,7 @@
           <span>GitHub</span>
         </a>
         <span class="foot__dot" aria-hidden="true">·</span>
-        <a class="foot__link" href="https://github.com/oglimmer/trivia/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+        <a class="foot__link" href="https://github.com/oglimmer/trivia/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
       </span>
     </div>
     <div class="foot__versions" aria-label="Build information">
