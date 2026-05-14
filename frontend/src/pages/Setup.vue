@@ -20,6 +20,9 @@
         <p class="muted" style="margin-top: 16px;">
           Start with a photo of whatever your question is about.
         </p>
+        <p class="muted" style="margin-top: 8px;">
+          If you wait here, you will still participate in the game when it starts.
+        </p>
 
         <PhotoPicker v-model="photo" />
 
