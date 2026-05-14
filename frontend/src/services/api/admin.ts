@@ -1,5 +1,6 @@
 import { request } from './http'
 import type {
+  AdminAllUser,
   AdminGameResponse,
   AdminGamesEntry,
   Game,
@@ -13,6 +14,7 @@ export interface UpdateSettingsBody { questionTimeoutSeconds?: number }
 export const adminApi = {
   login: (password: string) => request<{ token: string }>('POST', '/admin/login', { password }),
   listGames: () => request<AdminGamesEntry[]>('GET', '/admin/games'),
+  listAllUsers: () => request<AdminAllUser[]>('GET', '/admin/users'),
   createGame: (body: CreateGameBody) => request<AdminGamesEntry>('POST', '/admin/games', body),
   getGame: (code: string) => request<AdminGameResponse>('GET', `/admin/games/${code}`),
   deleteGame: (code: string) => request<null>('DELETE', `/admin/games/${code}`),

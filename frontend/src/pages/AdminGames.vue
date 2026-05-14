@@ -1,11 +1,14 @@
 <template>
   <main class="stack-lg">
     <div class="card stack">
-      <div class="row between">
+      <div class="row between" style="margin-bottom: 8px;">
         <h1 style="margin: 0;">Games</h1>
-        <span class="tag tag--admin">Host</span>
+        <div class="row" style="gap: 8px; align-items: center;">
+          <RouterLink to="/admin/users" class="btn-ghost btn-sm">All users →</RouterLink>
+          <span class="tag tag--admin">Host</span>
+        </div>
       </div>
-      <p class="muted" style="margin: -4px 0 0;">Spin up a room, share the code, let chaos begin.</p>
+      <p class="muted" style="margin: 0;">Spin up a room, share the code, let chaos begin.</p>
 
       <label for="game-name">Event name</label>
       <input id="game-name" v-model="name" placeholder="e.g. Family dinner — May 2025" />

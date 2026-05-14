@@ -280,6 +280,29 @@ func (f *fakeStore) ListUsers(_ context.Context, gameID string) ([]db.User, erro
 	return out, nil
 }
 
+func (f *fakeStore) ListAllUsers(_ context.Context) ([]db.AllUser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := []db.AllUser{}
+	for _, u := range f.users {
+		g, ok := f.games[u.GameID]
+		if !ok {
+			continue
+		}
+		c := *cloneUser(u)
+		c.Token = ""
+		out = append(out, db.AllUser{User: c, GameCode: g.Code, GameName: g.Name})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		li, lj := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if li != lj {
+			return li < lj
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
 // ---- Questions ----
 
 func (f *fakeStore) UpsertQuestion(_ context.Context, gameID, userID, text, photoB64, answerType string, options, correct json.RawMessage) (*db.Question, error) {

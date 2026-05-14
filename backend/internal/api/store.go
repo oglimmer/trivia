@@ -35,6 +35,7 @@ type Store interface {
 	UserByID(ctx context.Context, id string) (*db.User, error)
 	UserTokenByID(ctx context.Context, id string) (string, error)
 	ListUsers(ctx context.Context, gameID string) ([]db.User, error)
+	ListAllUsers(ctx context.Context) ([]db.AllUser, error)
 
 	// Questions
 	UpsertQuestion(ctx context.Context, gameID, userID, text, photoB64, answerType string, options, correct json.RawMessage) (*db.Question, error)

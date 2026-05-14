@@ -78,6 +78,16 @@ export interface AdminGameResponse {
   online?: string[]
 }
 
+export interface AdminAllUser {
+  id: string
+  gameId: string
+  gameCode: string
+  gameName: string
+  name: string
+  photoB64?: string
+  createdAt: string
+}
+
 export interface AdminGamesEntry {
   id: string
   code: string

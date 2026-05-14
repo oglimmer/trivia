@@ -21,6 +21,7 @@ func (s *Server) Routes() http.Handler {
 			r.Use(auth.RequireAdmin)
 			r.Get("/admin/games", s.listGames)
 			r.Post("/admin/games", s.createGame)
+			r.Get("/admin/users", s.listAllUsers)
 			r.Get("/admin/games/{code}", s.adminGame)
 			r.Delete("/admin/games/{code}", s.deleteGame)
 			r.Post("/admin/games/{code}/state", s.setGameState)

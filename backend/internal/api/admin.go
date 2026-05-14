@@ -74,6 +74,15 @@ func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
+func (s *Server) listAllUsers(w http.ResponseWriter, r *http.Request) {
+	us, err := s.DB.ListAllUsers(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, 200, us)
+}
+
 func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 	var b createGameBody
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {

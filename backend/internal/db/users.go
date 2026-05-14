@@ -82,3 +82,35 @@ func (d *DB) ListUsers(ctx context.Context, gameID string) ([]User, error) {
 	}
 	return out, rows.Err()
 }
+
+// AllUser is a user row enriched with the game code it belongs to, for the
+// admin-wide "all registered users" listing.
+type AllUser struct {
+	User
+	GameCode string `json:"gameCode"`
+	GameName string `json:"gameName"`
+}
+
+// ListAllUsers returns every user record across all games (without tokens),
+// joined with the game code/name for context. Ordered by name, then created_at.
+func (d *DB) ListAllUsers(ctx context.Context) ([]AllUser, error) {
+	rows, err := d.Pool.Query(ctx, `
+		SELECT u.id, u.game_id, u.name, u.photo_b64, '', u.created_at, g.code, g.name
+		FROM users u
+		JOIN games g ON g.id = u.game_id
+		ORDER BY lower(u.name) ASC, u.created_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AllUser{}
+	for rows.Next() {
+		var u AllUser
+		if err := rows.Scan(&u.ID, &u.GameID, &u.Name, &u.PhotoB64, &u.Token, &u.CreatedAt, &u.GameCode, &u.GameName); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
