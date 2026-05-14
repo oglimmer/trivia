@@ -222,7 +222,18 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad state")
 		return
 	}
+	prunedUsers := false
 	if b.State == "game" {
+		// Drop players who haven't been seen in the last 30 minutes — they've
+		// most likely abandoned the lobby and shouldn't appear on the
+		// leaderboard. Their questions stay (the FK is ON DELETE SET NULL).
+		cutoff := time.Now().Add(-staleUserThreshold)
+		removed, err := s.DB.DeleteStaleUsers(r.Context(), g.ID, cutoff)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		prunedUsers = len(removed) > 0
 		// Shuffle question order before entering game mode.
 		if err := s.DB.RandomizeQuestionOrder(r.Context(), g.ID); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
@@ -239,6 +250,11 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 	}
 	// No active question survives a state transition.
 	s.cancelAutoClose(g.ID)
+	if prunedUsers {
+		s.broadcastUsers(r.Context(), g.ID)
+		s.broadcastQuestionsAdmin(r.Context(), g.ID)
+		s.broadcastPresence(g.ID)
+	}
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
 }

@@ -28,6 +28,7 @@ type User struct {
 	Email     string    `json:"email,omitempty"`
 	Token     string    `json:"token,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
+	LastSeen  time.Time `json:"lastSeen"`
 }
 
 type Question struct {

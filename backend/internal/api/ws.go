@@ -52,6 +52,11 @@ func (s *Server) onWSJoin(c *ws.Client) {
 	// the client to fully refresh without an extra HTTP round-trip.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if c.Role == ws.RolePlayer && c.UserID != "" {
+		if err := s.DB.TouchUserLastSeen(ctx, c.UserID); err != nil {
+			log.Printf("touch last_seen on ws join for %s: %v", c.UserID, err)
+		}
+	}
 	g, err := s.DB.GameByID(ctx, c.GameID)
 	if err != nil {
 		return
@@ -88,6 +93,13 @@ func (s *Server) onWSJoin(c *ws.Client) {
 
 func (s *Server) onWSLeave(c *ws.Client) {
 	if c.Role == ws.RolePlayer {
+		if c.UserID != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.DB.TouchUserLastSeen(ctx, c.UserID); err != nil {
+				log.Printf("touch last_seen on ws leave for %s: %v", c.UserID, err)
+			}
+		}
 		s.broadcastPresence(c.GameID)
 	}
 }

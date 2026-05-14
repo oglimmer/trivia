@@ -311,6 +311,55 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	}
 }
 
+func TestSetGameStateToGamePrunesStalePlayers(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+
+	now := time.Now()
+	// Three users: one fresh (just created), one borderline-stale, one well-stale.
+	// Touch them via the fake store so we can pin LastSeen exactly.
+	fresh, _ := f.CreateUser(context.TODO(), g.ID, "Fresh", "", "", "tok-fresh")
+	stale, _ := f.CreateUser(context.TODO(), g.ID, "Stale", "", "", "tok-stale")
+	ancient, _ := f.CreateUser(context.TODO(), g.ID, "Ancient", "", "", "tok-old")
+
+	f.users[fresh.ID].LastSeen = now.Add(-1 * time.Minute)
+	f.users[stale.ID].LastSeen = now.Add(-31 * time.Minute)
+	f.users[ancient.ID].LastSeen = now.Add(-2 * time.Hour)
+
+	// Stale player has authored a question — it must survive the cleanup with
+	// user_id detached. We don't model the SET NULL in the fake; we just check
+	// the question itself is still present.
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, stale.ID, "stale question?", "x",
+		"yesno", json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/admin/games/" + g.Code + "/state",
+		bearer: adminBearer(t),
+		body:   `{"state":"game"}`,
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	users, _ := f.ListUsers(context.TODO(), g.ID)
+	names := map[string]bool{}
+	for _, u := range users {
+		names[u.Name] = true
+	}
+	if !names["Fresh"] {
+		t.Errorf("Fresh should still be present, got %v", names)
+	}
+	if names["Stale"] || names["Ancient"] {
+		t.Errorf("stale players should be removed, got %v", names)
+	}
+
+	qs, _ := f.ListQuestions(context.TODO(), g.ID, true)
+	if len(qs) != 1 {
+		t.Fatalf("question authored by stale player should be retained, got %d", len(qs))
+	}
+}
+
 // ---------- reveal / next ----------
 
 func TestRevealRequiresActiveQuestion(t *testing.T) {

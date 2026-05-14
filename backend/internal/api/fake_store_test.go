@@ -216,6 +216,7 @@ func (f *fakeStore) ClearCurrentQuestion(_ context.Context, gameID string) error
 func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, email, token string) (*db.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	now := f.now()
 	u := &db.User{
 		ID:        f.nextID("user"),
 		GameID:    gameID,
@@ -223,7 +224,8 @@ func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, email,
 		PhotoB64:  photoB64,
 		Email:     email,
 		Token:     token,
-		CreatedAt: f.now(),
+		CreatedAt: now,
+		LastSeen:  now,
 	}
 	f.users[u.ID] = u
 	return cloneUser(u), nil
@@ -258,6 +260,30 @@ func (f *fakeStore) DeleteUser(_ context.Context, id string) error {
 	defer f.mu.Unlock()
 	delete(f.users, id)
 	return nil
+}
+
+func (f *fakeStore) TouchUserLastSeen(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.users[id]
+	if !ok {
+		return db.ErrNotFound
+	}
+	u.LastSeen = f.now()
+	return nil
+}
+
+func (f *fakeStore) DeleteStaleUsers(_ context.Context, gameID string, cutoff time.Time) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var ids []string
+	for id, u := range f.users {
+		if u.GameID == gameID && u.LastSeen.Before(cutoff) {
+			ids = append(ids, id)
+			delete(f.users, id)
+		}
+	}
+	return ids, nil
 }
 
 func (f *fakeStore) UserByID(_ context.Context, id string) (*db.User, error) {

@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -17,6 +19,10 @@ const (
 	minQuestionTimeoutSeconds     = 5
 	maxQuestionTimeoutSeconds     = 600
 )
+
+// staleUserThreshold is how long a player can be silent before the
+// setup→game transition removes them from the lobby.
+const staleUserThreshold = 30 * time.Minute
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -59,13 +65,22 @@ func clampTimeout(v int) int {
 	return v
 }
 
-// playerFromHeader looks up a player by their X-Player-Token header.
+// playerFromHeader looks up a player by their X-Player-Token header. It also
+// bumps the user's last_seen timestamp so the setup→game cleanup knows the
+// player is still around.
 func (s *Server) playerFromHeader(r *http.Request) (*db.User, error) {
 	tok := r.Header.Get("X-Player-Token")
 	if tok == "" {
 		return nil, errors.New("missing player token")
 	}
-	return s.DB.UserByToken(r.Context(), tok)
+	u, err := s.DB.UserByToken(r.Context(), tok)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.DB.TouchUserLastSeen(r.Context(), u.ID); err != nil {
+		log.Printf("touch last_seen for %s: %v", u.ID, err)
+	}
+	return u, nil
 }
 
 // loadGameByCode resolves the {code} URL parameter to a game. On miss it
