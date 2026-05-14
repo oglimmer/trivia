@@ -14,15 +14,15 @@
       <input id="game-name" v-model="name" placeholder="e.g. Family dinner — May 2025" />
 
       <label for="game-code">Code (optional)</label>
+      <input id="game-code" v-model="code" placeholder="Random if blank" maxlength="8" class="mono" style="letter-spacing: .15em; text-transform: lowercase;" />
+
+      <label for="game-timeout">Question timeout (seconds)</label>
       <div class="row">
-        <input id="game-code" v-model="code" placeholder="Random if blank" maxlength="8" class="mono" style="letter-spacing: .15em; text-transform: lowercase;" />
+        <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" />
         <button class="btn-primary" :disabled="loading" @click="create" style="flex-shrink: 0;">
           {{ loading ? '…' : 'Create' }}
         </button>
       </div>
-
-      <label for="game-timeout">Question timeout (seconds)</label>
-      <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" />
       <div v-if="err" class="error">{{ err }}</div>
     </div>
 
