@@ -187,6 +187,30 @@
           <li v-if="!leaderboard.length" class="muted center" style="justify-content: center;">Scores will appear here.</li>
         </ol>
       </div>
+
+      <div class="card">
+        <div class="row between" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Players</h2>
+          <span class="tag tag--blue">{{ onlineCount }} / {{ users.length }} online</span>
+        </div>
+        <div class="row wrap" style="gap: 8px;">
+          <div
+            v-for="u in playersByPresence"
+            :key="u.id"
+            class="player-chip"
+            :class="{ 'player-chip--offline': !online.has(u.id), 'player-chip--answered': showAnsweredMarker && playerAnswered.has(u.id) }"
+            :title="online.has(u.id) ? 'Online' : 'Offline'"
+          >
+            <span class="avatar-wrap">
+              <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+              <span class="presence-dot presence-dot--sm" :class="{ 'presence-dot--on': online.has(u.id) }"></span>
+            </span>
+            <span class="player-chip__name">{{ u.name }}</span>
+            <span v-if="showAnsweredMarker && playerAnswered.has(u.id)" class="player-chip__check" aria-label="answered" title="Answered">✓</span>
+          </div>
+          <div v-if="!users.length" class="muted">No players.</div>
+        </div>
+      </div>
     </template>
 
     <transition name="dialog">
@@ -270,6 +294,12 @@ const { remaining } = useQuestionCountdown(game, { serverClockOffsetMs, interval
 
 const answeredUsers = computed(() => users.value.filter(u => playerAnswered.value.has(u.id)))
 const onlineCount = computed(() => users.value.filter(u => online.value.has(u.id)).length)
+const playersByPresence = computed(() => {
+  const on = users.value.filter(u => online.value.has(u.id))
+  const off = users.value.filter(u => !online.value.has(u.id))
+  return [...on, ...off]
+})
+const showAnsweredMarker = computed(() => game.value?.questionState === 'active' || game.value?.questionState === 'revealed')
 
 function userName(id: string): string {
   const u = users.value.find(u => u.id === id)
@@ -515,6 +545,46 @@ async function removeQuestion(q: Question) {
   height: 10px;
   right: -1px;
   bottom: -1px;
+}
+
+.player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-weight: 800;
+  font-size: .9rem;
+  max-width: 220px;
+  min-width: 0;
+}
+.player-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-chip--offline {
+  opacity: .55;
+  background: var(--cream-2, var(--paper));
+}
+.player-chip--offline .player-chip__name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.player-chip--answered {
+  background: var(--mint-2, var(--mint));
+}
+.player-chip__check {
+  color: var(--mint);
+  font-weight: 900;
+  margin-left: 2px;
+}
+.player-chip--answered .player-chip__check {
+  color: var(--ink);
 }
 
 .avatar-btn {
