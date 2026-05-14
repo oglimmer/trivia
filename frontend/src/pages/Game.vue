@@ -188,7 +188,7 @@ const answersWithUsers = computed(() => {
     ...a,
     name: usersByID.value[a.userId]?.name || '...',
     photo: usersByID.value[a.userId]?.photoB64 || '',
-  }))
+  })).sort((a, b) => b.points - a.points || a.responseMs - b.responseMs)
 })
 
 const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myId.value))
