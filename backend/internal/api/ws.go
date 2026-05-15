@@ -81,12 +81,13 @@ func (s *Server) onWSJoin(c *ws.Client) {
 	if users, err := s.DB.ListUsers(ctx, c.GameID); err == nil {
 		c.Send(map[string]any{"type": "users", "data": users})
 	}
-	if c.Role == ws.RoleAdmin {
+	switch c.Role {
+	case ws.RoleAdmin:
 		if qs, err := s.DB.ListQuestions(ctx, c.GameID, true); err == nil {
 			c.Send(map[string]any{"type": "questionsAdmin", "data": qs})
 		}
 		c.Send(s.presenceEnvelope(c.GameID))
-	} else if c.Role == ws.RolePlayer {
+	case ws.RolePlayer:
 		s.broadcastPresence(c.GameID)
 	}
 }
