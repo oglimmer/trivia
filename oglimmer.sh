@@ -31,6 +31,7 @@ RESTART="${RESTART:-true}"
 PUSH="${PUSH:-true}"
 HELP=false
 PLATFORM="${PLATFORM:-arm64}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
 RELEASE_MODE=false
 RELEASE_BUMP=""
 SHOW_VERSIONS=false
@@ -130,6 +131,8 @@ RELEASE OPTIONS:
                                - multi: Build for both amd64 and arm64 (multi-platform)
                                - auto: Detect current platform automatically
 
+    --context CONTEXT       kubectl context to use for deployment restarts
+
     -h, --help              Show this help message
 
 EXAMPLES:
@@ -141,12 +144,14 @@ EXAMPLES:
     ${SCRIPT_NAME} show                                     # Show current version
     ${SCRIPT_NAME} build --registries my-registry.com       # Use custom registry
     ${SCRIPT_NAME} build --platform amd64                   # Build for AMD64 only
+    ${SCRIPT_NAME} build --context new                      # Use kubectl context "new" for restarts
     ${SCRIPT_NAME} start                                    # Build and run backend locally
 
 ENVIRONMENT VARIABLES:
     FRONTEND_DEPLOYMENT     Override default frontend deployment name
     BACKEND_DEPLOYMENT      Override default backend deployment name
     PLATFORM                Override default platform (amd64|arm64|multi|auto)
+    KUBE_CONTEXT            kubectl context to use for deployment restarts
     DEFAULT_REGISTRIES_ENV  Override default registries (comma-separated)
     VERBOSE                 Enable verbose mode (true/false)
     DRY_RUN                 Enable dry-run mode (true/false)
@@ -234,6 +239,10 @@ parse_args() {
                 ;;
             --platform)
                 PLATFORM="$2"
+                shift 2
+                ;;
+            --context)
+                KUBE_CONTEXT="$2"
                 shift 2
                 ;;
             --bump)
@@ -583,16 +592,20 @@ build_image() {
 # Restart Kubernetes deployment
 restart_deployment() {
     local deployment="$1"
+    local ctx_arg=""
+    if [[ -n "$KUBE_CONTEXT" ]]; then
+        ctx_arg="--context=$KUBE_CONTEXT"
+    fi
 
-    log_info "Restarting deployment: $deployment"
+    log_info "Restarting deployment: $deployment${KUBE_CONTEXT:+ (context: $KUBE_CONTEXT)}"
 
-    if execute_cmd "kubectl rollout restart deployment/$deployment"; then
+    if execute_cmd "kubectl $ctx_arg rollout restart deployment/$deployment"; then
         log_success "Deployment $deployment restarted successfully"
 
         # Wait for rollout to complete if verbose
         if [[ "$VERBOSE" == true ]]; then
             log_info "Waiting for rollout to complete..."
-            kubectl rollout status deployment/"$deployment" --timeout=300s
+            kubectl $ctx_arg rollout status deployment/"$deployment" --timeout=300s
         fi
     else
         log_error "Failed to restart deployment: $deployment"
@@ -610,6 +623,7 @@ execute_build() {
     echo "Build Backend:     $BUILD_BACKEND"
     echo "Push to Registry:  $PUSH"
     echo "Restart K8s:       $RESTART"
+    echo "Kube Context:      ${KUBE_CONTEXT:-(current)}"
     echo "Dry-run:           $DRY_RUN"
     echo "Verbose:           $VERBOSE"
     if [[ "$BUILD_FRONTEND" == true ]]; then
