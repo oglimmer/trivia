@@ -3,7 +3,7 @@
     <div v-if="!noFrame" class="photo-frame">
       <img
         v-if="imageId"
-        :src="imageUrl(imageId, 'thumb')"
+        :src="imageUrl(imageId, 'medium')"
         alt=""
         loading="lazy"
         decoding="async"
