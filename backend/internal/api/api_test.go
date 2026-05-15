@@ -16,35 +16,35 @@ func TestValidateQuestion(t *testing.T) {
 	}{
 		{
 			name: "valid yesno",
-			body: putQuestionBody{Text: "real?", PhotoB64: "x", AnswerType: "yesno", Correct: json.RawMessage(`"yes"`)},
+			body: putQuestionBody{Text: "real?", PhotoImageID: "img-1", AnswerType: "yesno", Correct: json.RawMessage(`"yes"`)},
 			ok:   true,
 		},
 		{
 			name: "yesno bad correct",
-			body: putQuestionBody{Text: "real?", PhotoB64: "x", AnswerType: "yesno", Correct: json.RawMessage(`"maybe"`)},
+			body: putQuestionBody{Text: "real?", PhotoImageID: "img-1", AnswerType: "yesno", Correct: json.RawMessage(`"maybe"`)},
 			ok:   false,
 		},
 		{
 			name: "valid choice",
-			body: putQuestionBody{Text: "?", PhotoB64: "x", AnswerType: "choice",
+			body: putQuestionBody{Text: "?", PhotoImageID: "img-1", AnswerType: "choice",
 				Options: json.RawMessage(`["a","b","c"]`), Correct: json.RawMessage(`1`)},
 			ok: true,
 		},
 		{
 			name: "choice index out of range",
-			body: putQuestionBody{Text: "?", PhotoB64: "x", AnswerType: "choice",
+			body: putQuestionBody{Text: "?", PhotoImageID: "img-1", AnswerType: "choice",
 				Options: json.RawMessage(`["a","b"]`), Correct: json.RawMessage(`5`)},
 			ok: false,
 		},
 		{
 			name: "choice too many options",
-			body: putQuestionBody{Text: "?", PhotoB64: "x", AnswerType: "choice",
+			body: putQuestionBody{Text: "?", PhotoImageID: "img-1", AnswerType: "choice",
 				Options: json.RawMessage(`["a","b","c","d","e"]`), Correct: json.RawMessage(`0`)},
 			ok: false,
 		},
 		{
 			name: "valid number",
-			body: putQuestionBody{Text: "?", PhotoB64: "x", AnswerType: "number", Correct: json.RawMessage(`42`)},
+			body: putQuestionBody{Text: "?", PhotoImageID: "img-1", AnswerType: "number", Correct: json.RawMessage(`42`)},
 			ok:   true,
 		},
 		{
@@ -54,7 +54,7 @@ func TestValidateQuestion(t *testing.T) {
 		},
 		{
 			name: "unknown type",
-			body: putQuestionBody{Text: "?", PhotoB64: "x", AnswerType: "essay", Correct: json.RawMessage(`"foo"`)},
+			body: putQuestionBody{Text: "?", PhotoImageID: "img-1", AnswerType: "essay", Correct: json.RawMessage(`"foo"`)},
 			ok:   false,
 		},
 	}

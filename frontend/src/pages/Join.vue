@@ -18,7 +18,7 @@
     <!-- Live preview of the player card the user is building -->
     <section class="player-card" aria-label="Live preview of your player card">
       <div class="player-card__photo">
-        <img v-if="photo" :src="photo" alt="" />
+        <img v-if="photoId" :src="imageUrl(photoId, 'thumb')" alt="" loading="lazy" decoding="async" />
         <span v-else class="player-card__placeholder" aria-hidden="true">🙂</span>
       </div>
       <div :class="['player-card__name', !name.trim() && 'is-empty']">
@@ -42,7 +42,7 @@
       />
 
       <label>Your selfie</label>
-      <PhotoPicker v-model="photo" no-frame allow-random />
+      <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" no-frame allow-random />
 
       <template v-if="showEmail">
         <label for="player-email">Email (optional)</label>
@@ -62,7 +62,7 @@
 
       <button
         class="btn-primary btn-lg btn-block"
-        :disabled="!canSubmit || loading"
+        :disabled="!canSubmit || loading || pickerBusy"
         @click="submit"
       >
         {{ loading ? 'Saving…' : 'Save my card →' }}
@@ -83,6 +83,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import { playerApi } from '@/services/api'
+import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
 
@@ -93,13 +94,14 @@ const router = useRouter()
 const store = useGameStore()
 
 const name = ref('')
-const photo = ref('')
+const photoId = ref('')
+const pickerBusy = ref(false)
 const email = ref('')
 const scheduledAt = ref<string | null>(null)
 const loading = ref(false)
 const err = ref('')
 
-const canSubmit = computed(() => name.value.trim().length > 0 && photo.value.length > 0)
+const canSubmit = computed(() => name.value.trim().length > 0 && photoId.value.length > 0)
 
 // Email is only collected here when the host hasn't scheduled a start within
 // the next hour — close-to-start joiners are already mid-flow and don't need
@@ -126,7 +128,7 @@ async function submit() {
   try {
     const r = await playerApi.joinGame(props.code, {
       name: name.value.trim(),
-      photoB64: photo.value,
+      photoImageId: photoId.value,
       email: showEmail.value ? email.value.trim() : '',
     })
     store.setMe(r.token, { id: r.userId, name: name.value.trim(), gameId: r.gameId })

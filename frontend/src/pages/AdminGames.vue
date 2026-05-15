@@ -63,7 +63,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
-import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
 import { confirm } from '@/services/dialog'
 import type { AdminGamesEntry } from '@/types'
@@ -77,7 +76,6 @@ const loading = ref(false)
 const deleting = ref('')
 const err = ref('')
 const router = useRouter()
-const store = useGameStore()
 let presencePoll: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
@@ -94,10 +92,7 @@ async function refresh() {
   try {
     games.value = await adminApi.listGames() || []
   } catch (e) {
-    const msg = errMsg(e)
-    if (String(msg).toLowerCase().includes('unauthorized')) {
-      store.logoutAdmin(); router.replace('/admin')
-    } else err.value = msg
+    err.value = errMsg(e)
   }
 }
 

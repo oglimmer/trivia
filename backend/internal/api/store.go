@@ -30,8 +30,8 @@ type Store interface {
 	ClearCurrentQuestion(ctx context.Context, gameID string) error
 
 	// Users
-	CreateUser(ctx context.Context, gameID, name, photoB64, email, token string) (*db.User, error)
-	UpdateUser(ctx context.Context, id, name, photoB64, email string) error
+	CreateUser(ctx context.Context, gameID, name string, photoImageID *string, email, token string) (*db.User, error)
+	UpdateUser(ctx context.Context, id, name string, photoImageID *string, email string) error
 	UserByToken(ctx context.Context, token string) (*db.User, error)
 	DeleteUser(ctx context.Context, id string) error
 	UserByID(ctx context.Context, id string) (*db.User, error)
@@ -42,7 +42,7 @@ type Store interface {
 	DeleteStaleUsers(ctx context.Context, gameID string, cutoff time.Time) ([]string, error)
 
 	// Questions
-	UpsertQuestion(ctx context.Context, gameID, userID, text, photoB64, answerType string, options, correct json.RawMessage) (*db.Question, error)
+	UpsertQuestion(ctx context.Context, gameID, userID, text string, photoImageID *string, answerType string, options, correct json.RawMessage) (*db.Question, error)
 	ListQuestions(ctx context.Context, gameID string, includeCorrect bool) ([]db.Question, error)
 	QuestionByID(ctx context.Context, id string) (*db.Question, error)
 	DeleteQuestion(ctx context.Context, id string) error

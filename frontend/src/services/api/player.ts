@@ -9,15 +9,15 @@ import type {
   User,
 } from '@/types'
 
-export interface JoinBody { name: string; photoB64?: string; email?: string }
+export interface JoinBody { name: string; photoImageId?: string; email?: string }
 export interface QuestionBody {
   text: string
-  photoB64: string
+  photoImageId: string
   answerType: 'yesno' | 'choice' | 'number'
   options: string[]
   correct?: string | number
 }
-export interface AISuggestBody { hint: string; answerType: string; photoB64: string }
+export interface AISuggestBody { hint: string; answerType: string; photoImageId?: string }
 
 export const playerApi = {
   getGame: (code: string) => request<Game>('GET', `/games/${code}`),

@@ -3,24 +3,31 @@ package ai
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 )
 
-// SuggestRequest is what the frontend sends.
+// SuggestRequest is the prompt-side input to the AI client.
 type SuggestRequest struct {
 	// Hint is a free-form description from the user, e.g. "this is a picture of my dog".
 	Hint string `json:"hint"`
 	// AnswerType is one of yesno|choice|number.
 	AnswerType string `json:"answerType"`
-	// Optionally include the base64-encoded image (PNG/JPEG) so the model can see it.
-	PhotoB64 string `json:"photoB64,omitempty"`
+}
+
+// Image is the optional photo Anthropic will see alongside the prompt. Callers
+// hand over the raw bytes + media type; the client base64-encodes for the API.
+type Image struct {
+	MediaType string
+	Data      []byte
 }
 
 // SuggestResponse mirrors the question structure the user is filling in.
@@ -95,7 +102,7 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestResponse, error) {
+func (c *Client) Suggest(ctx context.Context, req SuggestRequest, image *Image) (*SuggestResponse, error) {
 	if c.APIKey == "" {
 		return nil, errors.New("ANTHROPIC_API_KEY not configured")
 	}
@@ -104,15 +111,17 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestRespo
 	}
 
 	userBlocks := []map[string]any{}
-	if req.PhotoB64 != "" {
-		// Trim a leading data: URI if present.
-		mediaType, b64 := splitDataURI(req.PhotoB64)
+	if image != nil && len(image.Data) > 0 {
+		mediaType := image.MediaType
+		if mediaType == "" {
+			mediaType = "image/jpeg"
+		}
 		userBlocks = append(userBlocks, map[string]any{
 			"type": "image",
 			"source": map[string]any{
 				"type":       "base64",
 				"media_type": mediaType,
-				"data":       b64,
+				"data":       base64.StdEncoding.EncodeToString(image.Data),
 			},
 		})
 	}
@@ -173,20 +182,52 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest) (*SuggestRespo
 	if err := json.Unmarshal([]byte(text[start:end+1]), out); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w; raw=%s", err, text)
 	}
+	// The model tends to put the correct answer first; shuffle so position
+	// isn't a tell.
+	if req.AnswerType == "choice" {
+		shuffleChoices(out)
+	}
 	return out, nil
 }
 
-// splitDataURI separates a data: URI's media type from its base64 payload.
-// A plain base64 string passes through with the default JPEG media type.
-func splitDataURI(s string) (mediaType, data string) {
-	mediaType = "image/jpeg"
-	if !strings.HasPrefix(s, "data:") {
-		return mediaType, s
+// shuffleChoices randomises the order of choice options and rewrites the
+// correct index to match the option's new position. No-op if the response
+// doesn't look like a well-formed choice question.
+func shuffleChoices(r *SuggestResponse) {
+	n := len(r.Options)
+	if n < 2 {
+		return
 	}
-	semi := strings.IndexByte(s, ';')
-	comma := strings.IndexByte(s, ',')
-	if semi <= 5 || comma <= semi {
-		return mediaType, s
+	correctIdx, ok := correctAsIndex(r.Correct, n)
+	if !ok {
+		return
 	}
-	return s[5:semi], s[comma+1:]
+	perm := rand.Perm(n)
+	shuffled := make([]string, n)
+	newCorrect := 0
+	for newPos, oldPos := range perm {
+		shuffled[newPos] = r.Options[oldPos]
+		if oldPos == correctIdx {
+			newCorrect = newPos
+		}
+	}
+	r.Options = shuffled
+	// Preserve the original numeric type (json.Unmarshal into `any` yields
+	// float64) so downstream JSON re-encoding looks identical.
+	r.Correct = float64(newCorrect)
+}
+
+func correctAsIndex(v any, n int) (int, bool) {
+	switch x := v.(type) {
+	case float64:
+		i := int(x)
+		if i >= 0 && i < n {
+			return i, true
+		}
+	case int:
+		if x >= 0 && x < n {
+			return x, true
+		}
+	}
+	return 0, false
 }

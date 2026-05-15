@@ -10,52 +10,9 @@ import (
 	"testing"
 )
 
-func TestSplitDataURI(t *testing.T) {
-	cases := []struct {
-		name     string
-		in       string
-		wantMT   string
-		wantData string
-	}{
-		{
-			name:     "png data uri",
-			in:       "data:image/png;base64,AAAA",
-			wantMT:   "image/png",
-			wantData: "AAAA",
-		},
-		{
-			name:     "jpeg data uri",
-			in:       "data:image/jpeg;base64,QkJC",
-			wantMT:   "image/jpeg",
-			wantData: "QkJC",
-		},
-		{
-			name:     "plain base64 defaults to jpeg",
-			in:       "AAAA",
-			wantMT:   "image/jpeg",
-			wantData: "AAAA",
-		},
-		{
-			name:     "malformed data uri falls through",
-			in:       "data:image/png-no-comma",
-			wantMT:   "image/jpeg",
-			wantData: "data:image/png-no-comma",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			mt, data := splitDataURI(c.in)
-			if mt != c.wantMT || data != c.wantData {
-				t.Errorf("splitDataURI(%q) = (%q, %q); want (%q, %q)",
-					c.in, mt, data, c.wantMT, c.wantData)
-			}
-		})
-	}
-}
-
 func TestSuggestRequiresAPIKey(t *testing.T) {
 	c := &Client{} // no APIKey
-	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"})
+	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"}, nil)
 	if err == nil {
 		t.Fatal("expected error when ANTHROPIC_API_KEY missing")
 	}
@@ -66,7 +23,7 @@ func TestSuggestRequiresAPIKey(t *testing.T) {
 
 func TestSuggestRejectsBadAnswerType(t *testing.T) {
 	c := &Client{APIKey: "k"} // key present, type bogus
-	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "essay"})
+	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "essay"}, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown answerType")
 	}
@@ -105,7 +62,7 @@ func TestSuggestHappyPath(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
-	got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "choice", Hint: "moon"})
+	got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "choice", Hint: "moon"}, nil)
 	if err != nil {
 		t.Fatalf("suggest: %v", err)
 	}
@@ -115,9 +72,44 @@ func TestSuggestHappyPath(t *testing.T) {
 	if len(got.Options) != 4 {
 		t.Errorf("options: want 4, got %d", len(got.Options))
 	}
-	// Numeric JSON deserialised into `any` becomes float64.
-	if n, ok := got.Correct.(float64); !ok || n != 1 {
-		t.Errorf("correct: want 1, got %v (%T)", got.Correct, got.Correct)
+	// Options are shuffled, but the "correct" index must still point at the
+	// original right answer ("1970", index 1 in the upstream payload).
+	n, ok := got.Correct.(float64)
+	if !ok {
+		t.Fatalf("correct: want float64, got %v (%T)", got.Correct, got.Correct)
+	}
+	if idx := int(n); idx < 0 || idx >= len(got.Options) || got.Options[idx] != "1970" {
+		t.Errorf("correct index %d should point at \"1970\", options=%v", idx, got.Options)
+	}
+}
+
+func TestSuggestShufflesChoiceOptions(t *testing.T) {
+	// Run several iterations; with 4 options the chance of *every* run
+	// preserving the original order is (1/24)^N, vanishingly small.
+	innerJSON := `{"text":"q?","options":["A","B","C","D"],"correct":0}`
+	resp, _ := json.Marshal(map[string]any{
+		"content": []map[string]any{{"type": "text", "text": innerJSON}},
+	})
+	srv := fakeAnthropic(t, 200, string(resp))
+	defer srv.Close()
+
+	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
+	sawShuffle := false
+	for i := 0; i < 40; i++ {
+		got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "choice"}, nil)
+		if err != nil {
+			t.Fatalf("suggest: %v", err)
+		}
+		idx := int(got.Correct.(float64))
+		if got.Options[idx] != "A" {
+			t.Fatalf("correct index %d should still point at \"A\", got %v", idx, got.Options)
+		}
+		if idx != 0 || got.Options[0] != "A" || got.Options[1] != "B" || got.Options[2] != "C" || got.Options[3] != "D" {
+			sawShuffle = true
+		}
+	}
+	if !sawShuffle {
+		t.Errorf("options were never shuffled across 40 runs")
 	}
 }
 
@@ -132,7 +124,7 @@ func TestSuggestExtractsJSONFromWrappedOutput(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
-	got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "number"})
+	got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "number"}, nil)
 	if err != nil {
 		t.Fatalf("suggest: %v", err)
 	}
@@ -146,7 +138,7 @@ func TestSuggestUpstream500(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
-	if _, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"}); err == nil {
+	if _, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"}, nil); err == nil {
 		t.Fatal("expected error from 500")
 	}
 }
@@ -156,8 +148,36 @@ func TestSuggestUpstreamGarbage(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
-	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"})
+	_, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "yesno"}, nil)
 	if err == nil {
 		t.Fatal("expected error when model output has no JSON block")
+	}
+}
+
+func TestSuggestSendsImageBlock(t *testing.T) {
+	// When an Image is provided, the user message must include an image block
+	// with base64-encoded data of the right media type.
+	var capturedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"content":[{"type":"text","text":"{\"text\":\"q\",\"options\":[],\"correct\":1}"}]}`)
+	}))
+	defer srv.Close()
+
+	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
+	img := &Image{MediaType: "image/png", Data: []byte{0x89, 0x50, 0x4E, 0x47}}
+	if _, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "number"}, img); err != nil {
+		t.Fatalf("suggest: %v", err)
+	}
+	if !strings.Contains(string(capturedBody), `"type":"image"`) {
+		t.Fatalf("request body missing image block: %s", capturedBody)
+	}
+	if !strings.Contains(string(capturedBody), `"media_type":"image/png"`) {
+		t.Fatalf("request body missing media_type: %s", capturedBody)
+	}
+	// iVBORw== is the base64 encoding of 0x89 0x50 0x4E 0x47 (PNG magic).
+	if !strings.Contains(string(capturedBody), `iVBORw==`) {
+		t.Fatalf("request body missing base64-encoded PNG magic: %s", capturedBody)
 	}
 }

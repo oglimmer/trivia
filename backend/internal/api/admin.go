@@ -130,6 +130,10 @@ func (s *Server) deleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.dropGameLock(g.ID)
+	// The game's users/questions are gone via ON DELETE CASCADE, leaving any
+	// images they pointed at unreferenced. Sweep them now instead of waiting
+	// for the periodic GC tick.
+	s.deleteOrphanImages(r.Context(), time.Now().Add(-orphanImageGrace))
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/api"
 	"github.com/oglimmer/trivia/backend/internal/db"
+	"github.com/oglimmer/trivia/backend/internal/images"
 	"github.com/oglimmer/trivia/backend/internal/mail"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
@@ -38,7 +39,12 @@ func main() {
 
 	hub := ws.NewHub()
 	srv := api.New(d, hub, ai.New(), mail.FromEnv())
+	srv.Images = images.New(d.Pool)
 	srv.ResumeAutoCloseTimers(ctx)
+
+	gcCtx, cancelGC := context.WithCancel(ctx)
+	defer cancelGC()
+	go srv.RunOrphanImageGC(gcCtx)
 
 	corsMW := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},

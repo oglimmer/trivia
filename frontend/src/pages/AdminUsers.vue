@@ -37,12 +37,19 @@
         <button
           type="button"
           class="avatar-btn"
-          @click="previewImage = u.photoB64 || ''"
+          @click="previewImage = imageUrl(u.photoImageId, 'orig')"
           :aria-label="`Preview photo of ${u.name}`"
-          :title="u.photoB64 ? 'Click to preview' : 'No photo'"
-          :disabled="!u.photoB64"
+          :title="hasPhoto(u) ? 'Click to preview' : 'No photo'"
+          :disabled="!hasPhoto(u)"
         >
-          <img v-if="u.photoB64" class="avatar avatar-lg" :src="u.photoB64" :alt="u.name" />
+          <img
+            v-if="hasPhoto(u)"
+            class="avatar avatar-lg"
+            :src="imageUrl(u.photoImageId, 'thumb')"
+            :alt="u.name"
+            loading="lazy"
+            decoding="async"
+          />
           <span v-else class="avatar avatar-lg avatar--placeholder" aria-hidden="true">{{ initials(u.name) }}</span>
         </button>
         <div class="user-card__meta">
@@ -83,7 +90,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
-import { useGameStore } from '@/stores/game'
+import { imageUrl } from '@/services/images'
 import { errMsg } from '@/composables/errMsg'
 import type { AdminAllUser } from '@/types'
 
@@ -93,7 +100,6 @@ const loading = ref(false)
 const err = ref('')
 const previewImage = ref('')
 const router = useRouter()
-const store = useGameStore()
 
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase()
@@ -104,6 +110,10 @@ const filtered = computed(() => {
     (u.gameName || '').toLowerCase().includes(q)
   )
 })
+
+function hasPhoto(u: AdminAllUser): boolean {
+  return !!u.photoImageId
+}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -124,11 +134,7 @@ onMounted(async () => {
   try {
     users.value = (await adminApi.listAllUsers()) || []
   } catch (e) {
-    const msg = errMsg(e)
-    if (msg.toLowerCase().includes('unauthorized')) {
-      store.logoutAdmin(); router.replace('/admin'); return
-    }
-    err.value = msg
+    err.value = errMsg(e)
   } finally {
     loading.value = false
   }

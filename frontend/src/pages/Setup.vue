@@ -54,9 +54,9 @@
           If you wait here, you will still participate in the game when it starts.
         </p>
 
-        <PhotoPicker v-model="photo" />
+        <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" />
 
-        <button class="btn-primary btn-lg btn-block" :disabled="!photo" @click="step = 'ai-choice'">
+        <button class="btn-primary btn-lg btn-block" :disabled="!photoId || pickerBusy" @click="step = 'ai-choice'">
           Continue →
         </button>
         <button v-if="saved" class="btn-link" @click="cancelEdit">Cancel</button>
@@ -72,7 +72,7 @@
         </p>
 
         <div class="photo-strip">
-          <img :src="photo" alt="" />
+          <img :src="imageUrl(photoId, 'medium')" alt="" loading="lazy" decoding="async" />
         </div>
 
         <button class="path-card path-card--ai" @click="useAIPath">
@@ -104,7 +104,7 @@
         <p class="muted" style="margin-top: 16px;">Write the question and set the right answer.</p>
 
         <div class="photo-summary">
-          <img class="photo-thumb" :src="photo" alt="" />
+          <img class="photo-thumb" :src="imageUrl(photoId, 'thumb')" alt="" loading="lazy" decoding="async" />
           <div class="photo-summary__meta">
             <div class="photo-summary__label">Photo</div>
             <button class="btn-link" @click="step = 'photo'">Change photo</button>
@@ -205,7 +205,7 @@
       </div>
       <div class="row wrap" style="gap: 10px;">
         <div v-for="u in users" :key="u.id" class="who" style="box-shadow: 2px 2px 0 var(--ink);">
-          <img class="avatar avatar-sm" :src="u.photoB64 || ''" :alt="u.name" />
+          <img class="avatar avatar-sm" :src="imageUrl(u.photoImageId, 'thumb')" :alt="u.name" loading="lazy" decoding="async" />
           <div class="who__meta"><span class="who__name">{{ u.name }}</span></div>
         </div>
         <span v-if="!users.length" class="muted">No one yet — be the first!</span>
@@ -220,6 +220,7 @@ import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import Stepper from '@/components/Stepper.vue'
 import { playerApi } from '@/services/api'
+import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
 import type { AnswerType, Question } from '@/types'
@@ -228,7 +229,8 @@ const props = defineProps<{ code: string }>()
 const router = useRouter()
 const store = useGameStore()
 
-const photo = ref('')
+const photoId = ref('')
+const pickerBusy = ref(false)
 const text = ref('')
 const answerType = ref<AnswerType>('yesno')
 const correct = ref<'yes' | 'no'>('yes')
@@ -287,7 +289,7 @@ const extraFieldsLabel = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  if (!photo.value || !text.value.trim()) return false
+  if (!photoId.value || !text.value.trim()) return false
   if (answerType.value === 'choice') {
     const filled = options.value.map(o => o.trim()).filter(Boolean)
     return filled.length >= 2 && correctIdx.value < options.value.length
@@ -330,7 +332,7 @@ watch(() => store.game && store.game.state, (s) => {
 
 function hydrateFromQuestion(q: Question) {
   text.value = q.text
-  photo.value = q.photoB64
+  photoId.value = q.photoImageId || ''
   answerType.value = q.answerType
   if (q.answerType === 'choice') {
     options.value = Array.isArray(q.options) && q.options.length ? q.options : ['', '']
@@ -365,7 +367,7 @@ async function useAIPath() {
     const r = await playerApi.aiSuggest({
       hint: '',
       answerType: 'choice',
-      photoB64: photo.value,
+      photoImageId: photoId.value,
     })
     answerType.value = 'choice'
     text.value = r.text || ''
@@ -387,13 +389,13 @@ async function save() {
   try {
     const body: {
       text: string
-      photoB64: string
+      photoImageId: string
       answerType: AnswerType
       options: string[]
       correct?: string | number
     } = {
       text: text.value.trim(),
-      photoB64: photo.value,
+      photoImageId: photoId.value,
       answerType: answerType.value,
       options: answerType.value === 'choice' ? options.value.map(o => o.trim()).filter(Boolean) : [],
       correct: undefined,
@@ -418,7 +420,7 @@ async function saveLockedEmail() {
     const trimmed = lockedEmail.value.trim()
     await playerApi.updateMe({
       name: store.me?.name || '',
-      photoB64: store.me?.photoB64 || '',
+      photoImageId: store.me?.photoImageId || '',
       email: trimmed,
     })
     store.updateMe({ email: trimmed })
@@ -443,7 +445,7 @@ async function confirmAI() {
     const r = await playerApi.aiSuggest({
       hint: text.value || '',
       answerType: 'choice',
-      photoB64: photo.value,
+      photoImageId: photoId.value,
     })
     answerType.value = 'choice'
     text.value = r.text || text.value

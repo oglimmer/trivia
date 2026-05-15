@@ -6,7 +6,7 @@
     </div>
 
     <span class="spot__rank">{{ rankLabel }}</span>
-    <img class="avatar avatar-lg" :src="score.photoB64" :alt="score.userName" />
+    <img class="avatar avatar-lg" :src="imageUrl(score.photoImageId, 'thumb')" :alt="score.userName" loading="lazy" decoding="async" />
     <div class="spot__name">{{ score.userName }}</div>
     <div class="spot__pts">{{ score.points }} pts</div>
   </div>
@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { imageUrl } from '@/services/images'
 import type { LeaderboardEntry } from '@/types'
 
 const props = withDefaults(defineProps<{

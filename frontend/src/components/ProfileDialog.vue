@@ -13,7 +13,14 @@
         <h2 id="profile-dlg-title" class="dialog__title">Edit your card</h2>
 
         <div class="profile-dlg__preview">
-          <img v-if="photo" class="avatar avatar-lg" :src="photo" alt="" />
+          <img
+            v-if="photoId"
+            class="avatar avatar-lg"
+            :src="imageUrl(photoId, 'thumb')"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
           <span v-else class="avatar avatar-lg profile-dlg__placeholder" aria-hidden="true">🙂</span>
         </div>
 
@@ -28,7 +35,7 @@
         />
 
         <label>Selfie</label>
-        <PhotoPicker v-model="photo" no-frame allow-random />
+        <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" no-frame allow-random />
 
         <label for="profile-dlg-email">Email (optional)</label>
         <input
@@ -56,7 +63,7 @@
           <button
             type="button"
             class="btn-primary dialog__btn"
-            :disabled="!canSave || saving"
+            :disabled="!canSave || saving || pickerBusy"
             @click="save"
           >{{ saving ? 'Saving…' : 'Save' }}</button>
         </div>
@@ -69,6 +76,7 @@
 import { ref, computed, watch } from 'vue'
 import PhotoPicker from './PhotoPicker.vue'
 import { playerApi } from '@/services/api'
+import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
 import { useModal } from '@/composables/useModal'
 import { errMsg } from '@/composables/errMsg'
@@ -78,7 +86,8 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const store = useGameStore()
 
 const name = ref('')
-const photo = ref('')
+const photoId = ref('')
+const pickerBusy = ref(false)
 const email = ref('')
 const err = ref('')
 const saving = ref(false)
@@ -88,10 +97,10 @@ const canSave = computed(() => {
   const trimmed = name.value.trim()
   if (!trimmed) return false
   const curName = store.me?.name || ''
-  const curPhoto = store.me?.photoB64 || ''
+  const curPhotoId = store.me?.photoImageId || ''
   const curEmail = store.me?.email || ''
   return trimmed !== curName
-    || photo.value !== curPhoto
+    || photoId.value !== curPhotoId
     || email.value.trim() !== curEmail
 })
 
@@ -99,7 +108,7 @@ const canSave = computed(() => {
 watch(() => props.open, (v) => {
   if (v) {
     name.value = store.me?.name || ''
-    photo.value = store.me?.photoB64 || ''
+    photoId.value = store.me?.photoImageId || ''
     email.value = store.me?.email || ''
     err.value = ''
     saving.value = false
@@ -119,8 +128,8 @@ async function save() {
   try {
     const newName = name.value.trim()
     const newEmail = email.value.trim()
-    await playerApi.updateMe({ name: newName, photoB64: photo.value, email: newEmail })
-    store.updateMe({ name: newName, photoB64: photo.value, email: newEmail })
+    await playerApi.updateMe({ name: newName, photoImageId: photoId.value, email: newEmail })
+    store.updateMe({ name: newName, photoImageId: photoId.value, email: newEmail })
     emit('close')
   } catch (e) {
     err.value = errMsg(e, 'Could not save')

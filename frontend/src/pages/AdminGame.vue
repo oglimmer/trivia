@@ -67,11 +67,11 @@
               <button
                 type="button"
                 class="avatar-btn"
-                @click="previewImage = q.photoB64"
+                @click="previewImage = imageUrl(q.photoImageId, 'orig')"
                 :aria-label="`Preview photo by ${userName(q.userId)}`"
                 title="Click to preview"
               >
-                <img class="avatar" :src="q.photoB64" alt="" />
+                <img class="avatar" :src="imageUrl(q.photoImageId, 'thumb')" alt="" loading="lazy" decoding="async" />
               </button>
               <div style="flex: 1; min-width: 0;">
                 <div class="bold">{{ q.text }}</div>
@@ -113,7 +113,7 @@
         <ul class="ladder">
           <li v-for="u in users" :key="u.id">
             <span class="avatar-wrap">
-              <img class="avatar" :src="u.photoB64" :alt="u.name" />
+              <img class="avatar" :src="imageUrl(u.photoImageId, 'thumb')" :alt="u.name" loading="lazy" decoding="async" />
               <span class="presence-dot" :class="{ 'presence-dot--on': online.has(u.id) }" :title="online.has(u.id) ? 'Online' : 'Offline'"></span>
             </span>
             <span class="bold" :class="{ 'muted': !online.has(u.id) }">{{ u.name }}</span>
@@ -146,7 +146,7 @@
 
         <div v-if="currentQ" class="stack">
           <div class="photo-frame">
-            <img :src="currentQ.photoB64" alt="" />
+            <img :src="imageUrl(currentQ.photoImageId, 'medium')" alt="" loading="lazy" decoding="async" />
             <div class="q-author">by {{ userName(currentQ.userId) }}</div>
           </div>
           <div class="q-card__text">{{ currentQ.text }}</div>
@@ -182,7 +182,7 @@
         <div class="row wrap" style="gap: 10px;">
           <div v-for="u in answeredUsers" :key="u.id" class="who" style="box-shadow: 2px 2px 0 var(--ink);">
             <span class="avatar-wrap">
-              <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+              <img class="avatar avatar-sm" :src="imageUrl(u.photoImageId, 'thumb')" :alt="u.name" loading="lazy" decoding="async" />
               <span class="presence-dot presence-dot--sm" :class="{ 'presence-dot--on': online.has(u.id) }"></span>
             </span>
             <div class="who__meta"><span class="who__name">{{ u.name }}</span></div>
@@ -195,7 +195,7 @@
         <ol class="ladder">
           <li v-for="(s, i) in leaderboard" :key="s.userId">
             <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="s.photoB64" :alt="s.userName" />
+            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
             <span class="bold">{{ s.userName }}</span>
             <span class="pts">{{ s.points }}</span>
           </li>
@@ -217,7 +217,7 @@
             :title="online.has(u.id) ? 'Online' : 'Offline'"
           >
             <span class="avatar-wrap">
-              <img class="avatar avatar-sm" :src="u.photoB64" :alt="u.name" />
+              <img class="avatar avatar-sm" :src="imageUrl(u.photoImageId, 'thumb')" :alt="u.name" loading="lazy" decoding="async" />
               <span class="presence-dot presence-dot--sm" :class="{ 'presence-dot--on': online.has(u.id) }"></span>
             </span>
             <span class="player-chip__name">{{ u.name }}</span>
@@ -256,7 +256,7 @@
         <ol class="ladder">
           <li v-for="(s, i) in leaderboard" :key="s.userId">
             <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="s.photoB64" :alt="s.userName" />
+            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
             <span class="bold">{{ s.userName }}</span>
             <span class="pts">{{ s.points }}</span>
           </li>
@@ -271,8 +271,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
 import { onMessage, wsConnectAdmin, disconnect } from '@/services/ws'
-import { useGameStore } from '@/stores/game'
 import { confirm } from '@/services/dialog'
+import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 import { useModalRef } from '@/composables/useModal'
 import { errMsg } from '@/composables/errMsg'
@@ -280,7 +280,6 @@ import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/typ
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
-const store = useGameStore()
 
 const game = ref<Game | null>(null)
 const users = ref<User[]>([])
@@ -336,11 +335,7 @@ async function load() {
     timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
     scheduledDraft.value = isoToLocalInput(r.game?.scheduledAt)
   } catch (e) {
-    const msg = errMsg(e)
-    if (msg.toLowerCase().includes('unauthorized')) {
-      store.logoutAdmin(); router.replace('/admin'); return
-    }
-    err.value = msg
+    err.value = errMsg(e)
   }
 }
 

@@ -8,24 +8,25 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const questionColumns = `id, game_id, COALESCE(user_id::text, '') AS user_id, text, photo_b64, answer_type,
+const questionColumns = `id, game_id, COALESCE(user_id::text, '') AS user_id, text, photo_image_id::text, answer_type,
 	options, correct, sort_order, created_at`
 
 func scanQuestion(row pgx.Row, q *Question) error {
-	return row.Scan(&q.ID, &q.GameID, &q.UserID, &q.Text, &q.PhotoB64,
+	return row.Scan(&q.ID, &q.GameID, &q.UserID, &q.Text, &q.PhotoImageID,
 		&q.AnswerType, &q.Options, &q.Correct, &q.SortOrder, &q.CreatedAt)
 }
 
-func (d *DB) UpsertQuestion(ctx context.Context, gameID, userID, text, photoB64, answerType string, options, correct json.RawMessage) (*Question, error) {
+func (d *DB) UpsertQuestion(ctx context.Context, gameID, userID, text string, photoImageID *string, answerType string, options, correct json.RawMessage) (*Question, error) {
 	q := &Question{}
 	row := d.Pool.QueryRow(ctx, `
-		INSERT INTO questions(game_id, user_id, text, photo_b64, answer_type, options, correct)
+		INSERT INTO questions(game_id, user_id, text, photo_image_id, answer_type, options, correct)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (game_id, user_id) DO UPDATE
-		SET text=EXCLUDED.text, photo_b64=EXCLUDED.photo_b64,
+		SET text=EXCLUDED.text,
+		    photo_image_id=EXCLUDED.photo_image_id,
 		    answer_type=EXCLUDED.answer_type, options=EXCLUDED.options, correct=EXCLUDED.correct
 		RETURNING `+questionColumns,
-		gameID, userID, text, photoB64, answerType, options, correct)
+		gameID, userID, text, nullableID(photoImageID), answerType, options, correct)
 	if err := scanQuestion(row, q); err != nil {
 		return nil, err
 	}

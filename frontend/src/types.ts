@@ -12,7 +12,7 @@ export type QuestionState = 'idle' | 'active' | 'revealed'
 export interface User {
   id: string
   name: string
-  photoB64?: string
+  photoImageId?: string
   email?: string
   gameId?: string
 }
@@ -32,7 +32,7 @@ export interface Question {
   id: string
   userId: string
   text: string
-  photoB64: string
+  photoImageId?: string
   answerType: AnswerType
   options?: string[]
   correct: string | number
@@ -51,7 +51,7 @@ export interface Answer {
 export interface LeaderboardEntry {
   userId: string
   userName: string
-  photoB64?: string
+  photoImageId?: string
   points: number
 }
 
@@ -86,7 +86,7 @@ export interface AdminAllUser {
   gameCode: string
   gameName: string
   name: string
-  photoB64?: string
+  photoImageId?: string
   createdAt: string
 }
 

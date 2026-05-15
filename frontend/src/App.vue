@@ -23,7 +23,7 @@
       </span>
     </div>
     <div class="foot__versions" aria-label="Build information">
-      <span class="foot__ver"><span class="foot__verLabel">frontend</span> v{{ frontend.version }} · {{ frontend.gitCommit }} · {{ frontend.buildTime }}</span>
+      <span class="foot__ver"><span class="foot__verLabel">frontend</span> v{{ frontend.version }} · {{ frontend.gitCommit }} · {{ dateOnly(frontend.buildTime) }}</span>
       <span class="foot__sep">·</span>
       <span class="foot__ver"><span class="foot__verLabel">backend</span> {{ backendLine }}</span>
     </div>
@@ -46,8 +46,12 @@ const editing = ref(false)
 const { frontend, backend, load } = useBuildInfo()
 onMounted(() => { load() })
 
+function dateOnly(s: string): string {
+  return /^\d{4}-\d{2}-\d{2}T/.test(s) ? s.slice(0, 10) : s
+}
+
 const backendLine = computed(() => {
   if (!backend.value) return '…'
-  return `v${backend.value.version} · ${backend.value.gitCommit} · ${backend.value.buildTime}`
+  return `v${backend.value.version} · ${backend.value.gitCommit} · ${dateOnly(backend.value.buildTime)}`
 })
 </script>

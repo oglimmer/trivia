@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -8,7 +9,11 @@ import (
 	"strings"
 
 	"github.com/oglimmer/trivia/backend/internal/ai"
+	"github.com/oglimmer/trivia/backend/internal/db"
+	"github.com/oglimmer/trivia/backend/internal/images"
 )
+
+const nameTakenMessage = "That name is already taken in this game — please pick another."
 
 func (s *Server) getGameForJoin(w http.ResponseWriter, r *http.Request) {
 	g := s.loadGameByCode(w, r)
@@ -25,9 +30,9 @@ func (s *Server) getGameForJoin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Name     string `json:"name"`
-		PhotoB64 string `json:"photoB64"`
-		Email    string `json:"email"`
+		Name         string `json:"name"`
+		PhotoImageID string `json:"photoImageId"`
+		Email        string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
@@ -35,8 +40,14 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 	}
 	b.Name = strings.TrimSpace(b.Name)
 	b.Email = strings.TrimSpace(b.Email)
+	b.PhotoImageID = strings.TrimSpace(b.PhotoImageID)
 	if b.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name required")
+		return
+	}
+	imgID, err := s.resolvePhotoImageID(r.Context(), b.PhotoImageID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	g := s.loadGameByCode(w, r)
@@ -47,15 +58,19 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "game not in setup")
 		return
 	}
-	u, err := s.DB.CreateUser(r.Context(), g.ID, b.Name, b.PhotoB64, b.Email, randomToken(16))
+	u, err := s.DB.CreateUser(r.Context(), g.ID, b.Name, imgID, b.Email, randomToken(16))
 	if err != nil {
+		if errors.Is(err, db.ErrNameTaken) {
+			writeErr(w, http.StatusConflict, nameTakenMessage)
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if b.Email != "" {
 		s.sendLoginLink(u.Email, u.Name, g.Name, g.Code, u.Token)
 	}
-	s.broadcastUsers(r.Context(), g.ID)
+	s.broadcastUsersDebounced(r.Context(), g.ID)
 	writeJSON(w, 200, map[string]any{
 		"token":  u.Token,
 		"userId": u.ID,
@@ -98,9 +113,9 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Name     string `json:"name"`
-		PhotoB64 string `json:"photoB64"`
-		Email    string `json:"email"`
+		Name         string `json:"name"`
+		PhotoImageID string `json:"photoImageId"`
+		Email        string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
@@ -108,12 +123,22 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	b.Name = strings.TrimSpace(b.Name)
 	b.Email = strings.TrimSpace(b.Email)
+	b.PhotoImageID = strings.TrimSpace(b.PhotoImageID)
 	if b.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name required")
 		return
 	}
+	imgID, err := s.resolvePhotoImageID(r.Context(), b.PhotoImageID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	prevEmail := u.Email
-	if err := s.DB.UpdateUser(r.Context(), u.ID, b.Name, b.PhotoB64, b.Email); err != nil {
+	if err := s.DB.UpdateUser(r.Context(), u.ID, b.Name, imgID, b.Email); err != nil {
+		if errors.Is(err, db.ErrNameTaken) {
+			writeErr(w, http.StatusConflict, nameTakenMessage)
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -163,11 +188,11 @@ func (s *Server) listQuestionsPublic(w http.ResponseWriter, r *http.Request) {
 }
 
 type putQuestionBody struct {
-	Text       string          `json:"text"`
-	PhotoB64   string          `json:"photoB64"`
-	AnswerType string          `json:"answerType"`
-	Options    json.RawMessage `json:"options"`
-	Correct    json.RawMessage `json:"correct"`
+	Text         string          `json:"text"`
+	PhotoImageID string          `json:"photoImageId"`
+	AnswerType   string          `json:"answerType"`
+	Options      json.RawMessage `json:"options"`
+	Correct      json.RawMessage `json:"correct"`
 }
 
 func (s *Server) putQuestion(w http.ResponseWriter, r *http.Request) {
@@ -193,14 +218,20 @@ func (s *Server) putQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad body")
 		return
 	}
+	b.PhotoImageID = strings.TrimSpace(b.PhotoImageID)
 	if err := validateQuestion(b); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	imgID, err := s.resolvePhotoImageID(r.Context(), b.PhotoImageID)
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if len(b.Options) == 0 {
 		b.Options = json.RawMessage("[]")
 	}
-	q, err := s.DB.UpsertQuestion(r.Context(), g.ID, u.ID, b.Text, b.PhotoB64, b.AnswerType, b.Options, b.Correct)
+	q, err := s.DB.UpsertQuestion(r.Context(), g.ID, u.ID, b.Text, imgID, b.AnswerType, b.Options, b.Correct)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -209,12 +240,33 @@ func (s *Server) putQuestion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, q)
 }
 
+// resolvePhotoImageID validates a caller-supplied photoImageId. Returns nil
+// when blank (the field is still optional on join/updateMe — putQuestion
+// rejects blank in validateQuestion). On a non-empty value it confirms the
+// row exists in the images table so a bad UUID surfaces as a 400 instead of
+// an opaque FK violation later.
+func (s *Server) resolvePhotoImageID(ctx context.Context, id string) (*string, error) {
+	if id == "" {
+		return nil, nil
+	}
+	if s.Images == nil {
+		return nil, errors.New("images not configured")
+	}
+	if _, err := s.Images.Get(ctx, id); err != nil {
+		if errors.Is(err, images.ErrNotFound) {
+			return nil, errors.New("photoImageId not found")
+		}
+		return nil, err
+	}
+	return &id, nil
+}
+
 func validateQuestion(b putQuestionBody) error {
 	if strings.TrimSpace(b.Text) == "" {
 		return errors.New("text required")
 	}
-	if b.PhotoB64 == "" {
-		return errors.New("photo required")
+	if b.PhotoImageID == "" {
+		return errors.New("photoImageId required")
 	}
 	switch b.AnswerType {
 	case "yesno":
@@ -261,12 +313,39 @@ func (s *Server) leaderboard(w http.ResponseWriter, r *http.Request) {
 // ---------- AI ----------
 
 func (s *Server) aiSuggest(w http.ResponseWriter, r *http.Request) {
-	var req ai.SuggestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var body struct {
+		Hint         string `json:"hint"`
+		AnswerType   string `json:"answerType"`
+		PhotoImageID string `json:"photoImageId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
 		return
 	}
-	res, err := s.AI.Suggest(r.Context(), req)
+	body.PhotoImageID = strings.TrimSpace(body.PhotoImageID)
+	var img *ai.Image
+	if body.PhotoImageID != "" {
+		if s.Images == nil {
+			writeErr(w, http.StatusServiceUnavailable, "images not configured")
+			return
+		}
+		// Use the medium variant — full-original bytes are wasteful for a vision
+		// prompt and the model doesn't need 1024 px detail.
+		blob, err := s.Images.GetVariant(r.Context(), body.PhotoImageID, "medium")
+		if err != nil {
+			if errors.Is(err, images.ErrNotFound) {
+				writeErr(w, http.StatusBadRequest, "photoImageId not found")
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		img = &ai.Image{MediaType: blob.Mime, Data: blob.Bytes}
+	}
+	res, err := s.AI.Suggest(r.Context(), ai.SuggestRequest{
+		Hint:       body.Hint,
+		AnswerType: body.AnswerType,
+	}, img)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

@@ -117,7 +117,11 @@ trivia/
 │       ├── 0001_init.sql
 │       ├── 0002_question_timeout.sql
 │       ├── 0003_game_scheduled_at.sql
-│       └── 0004_user_email.sql
+│       ├── 0004_user_email.sql
+│       ├── 0005_orphan_on_user_delete.sql
+│       ├── 0006_user_last_seen.sql
+│       ├── 0007_images.sql            # images + image_variants tables, photo_image_id FKs
+│       └── 0008_drop_photo_b64.sql    # contract step: drop legacy base64 columns
 ├── frontend/
 │   ├── nginx.conf
 │   └── src/
@@ -197,14 +201,20 @@ smtp:
 
 Public:
 - `GET  /api/games/{code}` — basic game info for the join screen, including `scheduledAt` (so the join page can decide whether to ask for an email)
-- `POST /api/games/{code}/join` — `{name, photoB64, email?}` → `{token, userId, gameId, code}`. A non-empty `email` triggers a magic-link send.
+- `POST /api/games/{code}/join` — `{name, photoImageId?, email?}` → `{token, userId, gameId, code}`. A non-empty `email` triggers a magic-link send. `photoImageId` references an image created via `POST /api/images`.
 - `GET  /api/me` — `X-Player-Token` header → `{user, game}`
-- `PUT  /api/me` — `{name, photoB64, email?}` (player edits own profile). Magic-link only fires when `email` is newly set or changes — repeat saves don't spam.
+- `PUT  /api/me` — `{name, photoImageId?, email?}` (player edits own profile). Magic-link only fires when `email` is newly set or changes — repeat saves don't spam.
 - `GET  /api/games/{code}/users` — list of joined players
 - `GET  /api/games/{code}/questions` — questions for the game (`correct` only included once the game is `finished`)
-- `PUT  /api/games/{code}/questions` — submit/update the player's question
+- `PUT  /api/games/{code}/questions` — submit/update the player's question (`photoImageId` required)
 - `GET  /api/games/{code}/leaderboard`
-- `POST /api/ai/suggest` — `{hint, answerType, photoB64}` → `{text, options, correct}`
+- `POST /api/ai/suggest` — `{hint, answerType, photoImageId?}` → `{text, options, correct}`. The backend fetches the `medium` variant of the referenced image and includes it as a vision block in the prompt.
+
+Image store:
+- `POST /api/images` — multipart `file` (≤ 8 MiB). Server re-encodes to JPEG q=85, generates `thumb` (128 px) and `medium` (640 px) variants, dedupes by sha256, and returns `{id}`.
+- `GET  /api/images/{id}` — original bytes.
+- `GET  /api/images/{id}/thumb` | `GET  /api/images/{id}/medium` — variants.
+- Responses set `Cache-Control: public, max-age=31536000, immutable` and a sha256-based `ETag`; `If-None-Match` returns `304`. No auth — the UUID is the capability.
 
 Admin (`Authorization: Bearer <jwt>`):
 - `POST   /api/admin/login` — `{password}` → `{token}`
@@ -243,7 +253,7 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 
 ### Deliberate trade-offs
 
-- **Photos stored as base64 in Postgres** (rather than an object store). Simple and works offline, but the DB grows quickly with high-resolution photos. The frontend resizes to 1024 px / JPEG q=0.82 before upload to keep this manageable (~100–500 KB per photo).
+- **Photos stored as BYTEA in Postgres**, in a dedicated `images` / `image_variants` pair of tables (rather than an object store). Content-addressed by sha256 → dedupe; thumb (128 px) + medium (640 px) variants are generated once on upload so the hot path never resizes. The frontend resizes to 1024 px / JPEG q=0.82 before upload to keep uploads cheap on mobile; the server re-encodes and is the authority. Simple to operate, works offline, and `Cache-Control: immutable` + ETag means thumbnails are served from the browser cache after the first hit — but the DB still grows with every unique photo. See `docs/image-architecture.md` for the design; the S3/MinIO escape hatch is listed under "If I were to keep building" below.
 - **Single admin via env var**, not a `users` table. Matches "an admin has to authenticate" without overbuilding.
 - **Randomized question order is set once on entering game mode**, not re-shuffled mid-game.
 - **Players see only their own answer ack** during a round, not who else has answered (admin sees the live tally). Avoids social pressure / spoilers.
@@ -258,7 +268,7 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 - **JWT secret defaults to a dev value** if `JWT_SECRET` is unset. Loud-fail on startup would be safer.
 - **No tests for the WebSocket layer** beyond a manual smoke script. Worth adding an integration test that boots a real `httptest.Server` + pgx with `testcontainers`.
 - **Migrations are idempotent `*.sql` files**, not versioned with a tool like `goose`/`atlas`. Adding a column today is fine; renaming one needs a tool.
-- **No game cleanup**. Old games and their base64 photos linger forever. Easy win: a daily job that deletes games older than N days.
+- **No game/image cleanup**. Old games linger forever; deleting a game doesn't touch its players' photos because the FK on `images` is `ON DELETE SET NULL` (per the `docs/image-architecture.md` design). Easy wins: a daily job that drops games older than N days, plus a periodic orphan sweep that deletes `images` rows no longer referenced by `users.photo_image_id` or `questions.photo_image_id` (CASCADE handles `image_variants`).
 - **No host-side reorder**: the admin can delete a question in setup, but ordering is still randomized once on transition to `game`.
 - **No "rewind"**: admin can only move forward through questions, can't re-open a revealed one.
 - **PWA basics missing**: no manifest, no service worker, no offline cache. App still works fine in a normal mobile browser.
@@ -269,7 +279,9 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 ### If I were to keep building
 
 1. Add a real integration test (postgres + WS + scoring + reveal) using `testcontainers-go`.
-2. Move photos to a `BYTEA` column or S3/MinIO; serve them via a signed-URL endpoint.
-3. Per-game settings panel: point shape, reveal autoplay (the answer window is already configurable).
-4. Multi-admin / SSO if this ever needs to scale past one host.
-5. PWA install + offline page so players don't lose state if their connection blips.
+2. Move the image bytes off Postgres to S3/MinIO (metadata + dedupe stay in `images` / `image_variants`); the serving endpoint becomes a redirect or signed-URL issuer. Only worth it once DB volume gets uncomfortable.
+3. WebP/AVIF variants alongside the JPEG thumb/medium (~30% smaller at equal quality), negotiated via the `Accept` header. Doubles per-image storage but cuts every image fetch.
+4. Blurhash / LQIP placeholders — a ~20-char hash stored on each `images` row, returned alongside `photoImageId`, rendered as a blurred gradient while the real thumbnail loads. Perceived-perf polish, not bytes-on-the-wire.
+5. Per-game settings panel: point shape, reveal autoplay (the answer window is already configurable).
+6. Multi-admin / SSO if this ever needs to scale past one host.
+7. PWA install + offline page so players don't lose state if their connection blips.

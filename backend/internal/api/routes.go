@@ -35,6 +35,12 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/admin/games/{code}/questions/{questionId}", s.deleteQuestion)
 		})
 
+		// Image upload / serving — no auth on the read path; UUID is the
+		// capability. See docs/image-architecture.md §3.
+		r.Post("/images", s.uploadImage)
+		r.Get("/images/{id}", s.getImage)
+		r.Get("/images/{id}/{variant}", s.getImageVariant)
+
 		// Player-facing endpoints.
 		r.Get("/games/{code}", s.getGameForJoin)
 		r.Post("/games/{code}/join", s.joinGame)

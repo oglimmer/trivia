@@ -21,27 +21,27 @@ type Game struct {
 }
 
 type User struct {
-	ID        string    `json:"id"`
-	GameID    string    `json:"gameId"`
-	Name      string    `json:"name"`
-	PhotoB64  string    `json:"photoB64,omitempty"`
-	Email     string    `json:"email,omitempty"`
-	Token     string    `json:"token,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	LastSeen  time.Time `json:"lastSeen"`
+	ID           string    `json:"id"`
+	GameID       string    `json:"gameId"`
+	Name         string    `json:"name"`
+	PhotoImageID *string   `json:"photoImageId,omitempty"`
+	Email        string    `json:"email,omitempty"`
+	Token        string    `json:"token,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	LastSeen     time.Time `json:"lastSeen"`
 }
 
 type Question struct {
-	ID         string          `json:"id"`
-	GameID     string          `json:"gameId"`
-	UserID     string          `json:"userId"`
-	Text       string          `json:"text"`
-	PhotoB64   string          `json:"photoB64,omitempty"`
-	AnswerType string          `json:"answerType"`
-	Options    json.RawMessage `json:"options"`
-	Correct    json.RawMessage `json:"correct,omitempty"`
-	SortOrder  int             `json:"sortOrder"`
-	CreatedAt  time.Time       `json:"createdAt"`
+	ID           string          `json:"id"`
+	GameID       string          `json:"gameId"`
+	UserID       string          `json:"userId"`
+	Text         string          `json:"text"`
+	PhotoImageID *string         `json:"photoImageId,omitempty"`
+	AnswerType   string          `json:"answerType"`
+	Options      json.RawMessage `json:"options"`
+	Correct      json.RawMessage `json:"correct,omitempty"`
+	SortOrder    int             `json:"sortOrder"`
+	CreatedAt    time.Time       `json:"createdAt"`
 }
 
 type Answer struct {
@@ -56,11 +56,14 @@ type Answer struct {
 }
 
 type Score struct {
-	UserID   string `json:"userId"`
-	UserName string `json:"userName"`
-	PhotoB64 string `json:"photoB64,omitempty"`
-	Points   int    `json:"points"`
-	Correct  int    `json:"correct"`
+	UserID       string  `json:"userId"`
+	UserName     string  `json:"userName"`
+	PhotoImageID *string `json:"photoImageId,omitempty"`
+	Points       int     `json:"points"`
+	Correct      int     `json:"correct"`
 }
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound  = errors.New("not found")
+	ErrNameTaken = errors.New("name already taken")
+)

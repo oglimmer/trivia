@@ -45,14 +45,14 @@ func (d *DB) AnswersForQuestion(ctx context.Context, questionID string) ([]Answe
 
 func (d *DB) Leaderboard(ctx context.Context, gameID string) ([]Score, error) {
 	rows, err := d.Pool.Query(ctx, `
-		SELECT u.id, u.name, u.photo_b64,
+		SELECT u.id, u.name, u.photo_image_id::text,
 		       COALESCE(SUM(a.points), 0)::INT AS points,
 		       COALESCE(SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END), 0)::INT AS correct
 		FROM users u
 		LEFT JOIN answers a ON a.user_id = u.id
 		LEFT JOIN questions q ON q.id = a.question_id AND q.game_id = u.game_id
 		WHERE u.game_id = $1
-		GROUP BY u.id, u.name, u.photo_b64
+		GROUP BY u.id, u.name, u.photo_image_id
 		ORDER BY points DESC, u.name ASC
 	`, gameID)
 	if err != nil {
@@ -62,7 +62,7 @@ func (d *DB) Leaderboard(ctx context.Context, gameID string) ([]Score, error) {
 	var out []Score
 	for rows.Next() {
 		var s Score
-		if err := rows.Scan(&s.UserID, &s.UserName, &s.PhotoB64, &s.Points, &s.Correct); err != nil {
+		if err := rows.Scan(&s.UserID, &s.UserName, &s.PhotoImageID, &s.Points, &s.Correct); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

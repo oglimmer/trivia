@@ -24,7 +24,14 @@
             aria-label="Edit profile"
             @click="emit('edit-profile')"
           >
-            <img v-if="store.me.photoB64" class="avatar avatar-sm" :src="store.me.photoB64" alt="" />
+            <img
+              v-if="store.me.photoImageId"
+              class="avatar avatar-sm"
+              :src="imageUrl(store.me.photoImageId, 'thumb')"
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
             <div class="who__meta">
               <span class="who__name">{{ store.me.name }}</span>
               <span v-if="store.game" class="who__code">{{ store.game.code }}</span>
@@ -47,6 +54,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { disconnect } from '@/services/ws'
 import { confirm } from '@/services/dialog'
+import { imageUrl } from '@/services/images'
 
 const emit = defineEmits<{ (e: 'edit-profile'): void }>()
 const store = useGameStore()

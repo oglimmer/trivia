@@ -168,7 +168,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, gameID, userID strin
 	c := &Client{
 		hub:    h,
 		conn:   conn,
-		send:   make(chan []byte, 32),
+		send:   make(chan []byte, 256),
 		GameID: gameID,
 		UserID: userID,
 		Role:   role,

@@ -32,7 +32,7 @@
             <ol class="ladder">
               <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
                 <span class="rank">{{ i + 1 }}</span>
-                <img class="avatar" :src="s.photoB64" :alt="s.userName" />
+                <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
                 <span class="bold">{{ s.userName }}</span>
                 <span class="pts">{{ s.points }}</span>
               </li>
@@ -52,6 +52,7 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { playerApi } from '@/services/api'
+import { imageUrl } from '@/services/images'
 import Spotlight from '@/components/Spotlight.vue'
 
 const props = defineProps<{ code: string }>()

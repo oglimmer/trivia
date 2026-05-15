@@ -213,33 +213,48 @@ func (f *fakeStore) ClearCurrentQuestion(_ context.Context, gameID string) error
 
 // ---- Users ----
 
-func (f *fakeStore) CreateUser(_ context.Context, gameID, name, photoB64, email, token string) (*db.User, error) {
+func (f *fakeStore) CreateUser(_ context.Context, gameID, name string, photoImageID *string, email, token string) (*db.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	lower := strings.ToLower(name)
+	for _, existing := range f.users {
+		if existing.GameID == gameID && strings.ToLower(existing.Name) == lower {
+			return nil, db.ErrNameTaken
+		}
+	}
 	now := f.now()
 	u := &db.User{
-		ID:        f.nextID("user"),
-		GameID:    gameID,
-		Name:      name,
-		PhotoB64:  photoB64,
-		Email:     email,
-		Token:     token,
-		CreatedAt: now,
-		LastSeen:  now,
+		ID:           f.nextID("user"),
+		GameID:       gameID,
+		Name:         name,
+		PhotoImageID: clonePtr(photoImageID),
+		Email:        email,
+		Token:        token,
+		CreatedAt:    now,
+		LastSeen:     now,
 	}
 	f.users[u.ID] = u
 	return cloneUser(u), nil
 }
 
-func (f *fakeStore) UpdateUser(_ context.Context, id, name, photoB64, email string) error {
+func (f *fakeStore) UpdateUser(_ context.Context, id, name string, photoImageID *string, email string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	u, ok := f.users[id]
 	if !ok {
 		return db.ErrNotFound
 	}
+	lower := strings.ToLower(name)
+	for otherID, other := range f.users {
+		if otherID == id {
+			continue
+		}
+		if other.GameID == u.GameID && strings.ToLower(other.Name) == lower {
+			return db.ErrNameTaken
+		}
+	}
 	u.Name = name
-	u.PhotoB64 = photoB64
+	u.PhotoImageID = clonePtr(photoImageID)
 	u.Email = email
 	return nil
 }
@@ -350,13 +365,13 @@ func (f *fakeStore) ListAllUsers(_ context.Context) ([]db.AllUser, error) {
 
 // ---- Questions ----
 
-func (f *fakeStore) UpsertQuestion(_ context.Context, gameID, userID, text, photoB64, answerType string, options, correct json.RawMessage) (*db.Question, error) {
+func (f *fakeStore) UpsertQuestion(_ context.Context, gameID, userID, text string, photoImageID *string, answerType string, options, correct json.RawMessage) (*db.Question, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, q := range f.questions {
 		if q.GameID == gameID && q.UserID == userID {
 			q.Text = text
-			q.PhotoB64 = photoB64
+			q.PhotoImageID = clonePtr(photoImageID)
 			q.AnswerType = answerType
 			q.Options = options
 			q.Correct = correct
@@ -364,16 +379,16 @@ func (f *fakeStore) UpsertQuestion(_ context.Context, gameID, userID, text, phot
 		}
 	}
 	q := &db.Question{
-		ID:         f.nextID("q"),
-		GameID:     gameID,
-		UserID:     userID,
-		Text:       text,
-		PhotoB64:   photoB64,
-		AnswerType: answerType,
-		Options:    options,
-		Correct:    correct,
-		SortOrder:  len(f.questions),
-		CreatedAt:  f.now(),
+		ID:           f.nextID("q"),
+		GameID:       gameID,
+		UserID:       userID,
+		Text:         text,
+		PhotoImageID: clonePtr(photoImageID),
+		AnswerType:   answerType,
+		Options:      options,
+		Correct:      correct,
+		SortOrder:    len(f.questions),
+		CreatedAt:    f.now(),
 	}
 	f.questions[q.ID] = q
 	return cloneQuestion(q), nil
@@ -495,7 +510,7 @@ func (f *fakeStore) Leaderboard(_ context.Context, gameID string) ([]db.Score, e
 		if u.GameID != gameID {
 			continue
 		}
-		totals[u.ID] = &db.Score{UserID: u.ID, UserName: u.Name, PhotoB64: u.PhotoB64}
+		totals[u.ID] = &db.Score{UserID: u.ID, UserName: u.Name, PhotoImageID: clonePtr(u.PhotoImageID)}
 	}
 	for _, a := range f.answers {
 		q, ok := f.questions[a.QuestionID]
@@ -551,11 +566,13 @@ func cloneGame(g *db.Game) *db.Game {
 
 func cloneUser(u *db.User) *db.User {
 	c := *u
+	c.PhotoImageID = clonePtr(u.PhotoImageID)
 	return &c
 }
 
 func cloneQuestion(q *db.Question) *db.Question {
 	c := *q
+	c.PhotoImageID = clonePtr(q.PhotoImageID)
 	if q.Options != nil {
 		c.Options = append(json.RawMessage(nil), q.Options...)
 	}
@@ -563,4 +580,12 @@ func cloneQuestion(q *db.Question) *db.Question {
 		c.Correct = append(json.RawMessage(nil), q.Correct...)
 	}
 	return &c
+}
+
+func clonePtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }

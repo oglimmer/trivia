@@ -209,7 +209,7 @@ func TestJoinGameHappy(t *testing.T) {
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
-		body:   `{"name":"Alice","photoB64":"x"}`,
+		body:   `{"name":"Alice"}`,
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
@@ -217,6 +217,105 @@ func TestJoinGameHappy(t *testing.T) {
 	out := decode[map[string]string](t, w)
 	if out["token"] == "" || out["userId"] == "" {
 		t.Errorf("expected token and userId, got %v", out)
+	}
+}
+
+func TestJoinGameWithPhotoImageID(t *testing.T) {
+	s, f := testServer(t)
+	s.Images = newFakeImageStore("img-1")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/games/" + g.Code + "/join",
+		body:   `{"name":"Alice","photoImageId":"img-1"}`,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	users, _ := f.ListUsers(context.TODO(), g.ID)
+	if len(users) != 1 {
+		t.Fatalf("want 1 user, got %d", len(users))
+	}
+	if users[0].PhotoImageID == nil || *users[0].PhotoImageID != "img-1" {
+		t.Errorf("photoImageId not stored: %+v", users[0].PhotoImageID)
+	}
+}
+
+func TestJoinGameRejectsDuplicateNameCaseInsensitive(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-existing")
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/games/" + g.Code + "/join",
+		body:   `{"name":"  alice  "}`,
+	})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409 (name taken), got %d (%s)", w.Code, w.Body.String())
+	}
+	out := decode[map[string]string](t, w)
+	if !strings.Contains(strings.ToLower(out["error"]), "already taken") {
+		t.Errorf("expected user-friendly 'already taken' error, got %q", out["error"])
+	}
+}
+
+func TestJoinGameAllowsSameNameInDifferentGames(t *testing.T) {
+	s, f := testServer(t)
+	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz A", 30, nil)
+	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz B", 30, nil)
+	_, _ = f.CreateUser(context.TODO(), g1.ID, "Alice", nil, "", "tok-g1")
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/games/" + g2.Code + "/join",
+		body:   `{"name":"Alice"}`,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 (different game), got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateMeRejectsDuplicateNameCaseInsensitive(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
+	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
+	w := do(t, s, req{
+		method:   "PUT",
+		path:     "/api/me",
+		body:     `{"name":"ALICE"}`,
+		playerTo: bob.Token,
+	})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409 (name taken), got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateMeAllowsSameNameForSelf(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
+	w := do(t, s, req{
+		method:   "PUT",
+		path:     "/api/me",
+		body:     `{"name":"Alice"}`,
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204 (self-rename no-op), got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestJoinGameRejectsUnknownPhotoImageID(t *testing.T) {
+	s, f := testServer(t)
+	s.Images = newFakeImageStore() // empty
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/games/" + g.Code + "/join",
+		body:   `{"name":"Alice","photoImageId":"missing"}`,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for unknown image id, got %d (%s)", w.Code, w.Body.String())
 	}
 }
 
@@ -233,7 +332,7 @@ func TestMeRequiresPlayerToken(t *testing.T) {
 func TestMeReturnsUserAndGame(t *testing.T) {
 	s, f := testServer(t)
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
-	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", "", "", "tok-1")
+	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-1")
 	w := do(t, s, req{method: "GET", path: "/api/me", playerTo: u.Token})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
@@ -250,6 +349,50 @@ func TestMeReturnsUserAndGame(t *testing.T) {
 	}
 	if out.Game == nil || out.Game.Code != "abcd" {
 		t.Errorf("unexpected game: %+v", out.Game)
+	}
+}
+
+// ---------- putQuestion + leaderboard photo wiring ----------
+
+func TestPutQuestionWithPhotoImageID(t *testing.T) {
+	s, f := testServer(t)
+	s.Images = newFakeImageStore("img-q")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-author")
+
+	body := `{"text":"real?","photoImageId":"img-q","answerType":"yesno","options":[],"correct":"yes"}`
+	w := do(t, s, req{
+		method:   "PUT",
+		path:     "/api/games/" + g.Code + "/questions",
+		body:     body,
+		playerTo: u.Token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	q := decode[db.Question](t, w)
+	if q.PhotoImageID == nil || *q.PhotoImageID != "img-q" {
+		t.Errorf("photoImageId not stored on question: %+v", q.PhotoImageID)
+	}
+}
+
+func TestLeaderboardSurfacesPhotoImageID(t *testing.T) {
+	s, f := testServer(t)
+	s.Images = newFakeImageStore("img-le")
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	imgID := "img-le"
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", &imgID, "", "tok-a")
+
+	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/leaderboard"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	scores := decode[[]db.Score](t, w)
+	if len(scores) != 1 {
+		t.Fatalf("want 1 score row, got %d", len(scores))
+	}
+	if scores[0].PhotoImageID == nil || *scores[0].PhotoImageID != imgID {
+		t.Errorf("photoImageId missing from leaderboard: %+v", scores[0].PhotoImageID)
 	}
 }
 
@@ -273,9 +416,9 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	s, f := testServer(t)
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// Put two questions on the game. SortOrder starts at 0 for both via Upsert.
-	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-a", "q1?", "x", "yesno",
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-a", "q1?", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
-	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-b", "q2?", "x", "yesno",
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-b", "q2?", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"no"`))
 	// Pretend there's a current question, so we can verify it's cleared.
 	qID := "q-stale"
@@ -318,9 +461,9 @@ func TestSetGameStateToGamePrunesStalePlayers(t *testing.T) {
 	now := time.Now()
 	// Three users: one fresh (just created), one borderline-stale, one well-stale.
 	// Touch them via the fake store so we can pin LastSeen exactly.
-	fresh, _ := f.CreateUser(context.TODO(), g.ID, "Fresh", "", "", "tok-fresh")
-	stale, _ := f.CreateUser(context.TODO(), g.ID, "Stale", "", "", "tok-stale")
-	ancient, _ := f.CreateUser(context.TODO(), g.ID, "Ancient", "", "", "tok-old")
+	fresh, _ := f.CreateUser(context.TODO(), g.ID, "Fresh", nil, "", "tok-fresh")
+	stale, _ := f.CreateUser(context.TODO(), g.ID, "Stale", nil, "", "tok-stale")
+	ancient, _ := f.CreateUser(context.TODO(), g.ID, "Ancient", nil, "", "tok-old")
 
 	f.users[fresh.ID].LastSeen = now.Add(-1 * time.Minute)
 	f.users[stale.ID].LastSeen = now.Add(-31 * time.Minute)
@@ -329,7 +472,7 @@ func TestSetGameStateToGamePrunesStalePlayers(t *testing.T) {
 	// Stale player has authored a question — it must survive the cleanup with
 	// user_id detached. We don't model the SET NULL in the fake; we just check
 	// the question itself is still present.
-	_, _ = f.UpsertQuestion(context.TODO(), g.ID, stale.ID, "stale question?", "x",
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, stale.ID, "stale question?", nil,
 		"yesno", json.RawMessage(`[]`), json.RawMessage(`"yes"`))
 
 	w := do(t, s, req{
@@ -379,7 +522,7 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 	s, f := testServer(t)
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// One number question, three players with varying closeness.
-	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "How many?", "x", "number",
+	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "How many?", nil, "number",
 		json.RawMessage(`[]`), json.RawMessage(`100`))
 	for _, p := range []struct {
 		uid    string
@@ -420,7 +563,7 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 func TestNextQuestionFinishesAtEnd(t *testing.T) {
 	s, f := testServer(t)
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
-	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "only", "x", "yesno",
+	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "only", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
 	_ = f.ActivateQuestion(context.TODO(), g.ID, q.ID)
@@ -447,6 +590,8 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 
 func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
+	imgs := newFakeImageStore()
+	s.Images = imgs
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	// Force lifecycle state populated.
 	s.lockFor(g.ID)                                // populate gameLocks
@@ -470,5 +615,11 @@ func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s.autoCloseMu.Unlock()
 	if hasTimer {
 		t.Errorf("expected auto-close timer to be cancelled")
+	}
+	imgs.mu.Lock()
+	calls := len(imgs.deleteOrphansCalls)
+	imgs.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("expected one orphan-image sweep, got %d", calls)
 	}
 }

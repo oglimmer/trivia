@@ -24,13 +24,20 @@
         </header>
 
         <div class="photo-frame">
-          <img :src="q.photoB64" alt="question photo" />
+          <img
+            :src="imageUrl(q.photoImageId, 'medium')"
+            alt="question photo"
+            loading="lazy"
+            decoding="async"
+          />
           <img
             v-if="authorPhoto"
             class="q-author-avatar"
             :src="authorPhoto"
             :alt="authorName ? `by ${authorName}` : ''"
             :title="authorName ? `by ${authorName}` : ''"
+            loading="lazy"
+            decoding="async"
           />
         </div>
 
@@ -116,7 +123,7 @@
         </div>
         <ul class="ladder">
           <li v-for="a in answersWithUsers" :key="a.id" :class="{ me: a.userId === myId }">
-            <img class="avatar" :src="a.photo" :alt="a.name" />
+            <img class="avatar" :src="a.photo" :alt="a.name" loading="lazy" decoding="async" />
             <span class="bold">{{ a.name }}</span>
             <span class="muted timer">{{ (a.responseMs / 1000).toFixed(1) }}s</span>
             <span class="pts">
@@ -133,7 +140,7 @@
         <ol class="ladder">
           <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
             <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="s.photoB64" :alt="s.userName" />
+            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
             <span class="bold">{{ s.userName }}</span>
             <span class="pts">{{ s.points }}</span>
           </li>
@@ -149,6 +156,7 @@ import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { onMessage, wsSend } from '@/services/ws'
 import { playerApi } from '@/services/api'
+import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 
 type VerdictKind = 'correct' | 'wrong' | 'none'
@@ -181,14 +189,22 @@ const correctNumber = computed(() => q.value ? Number(q.value.correct) : 0)
 
 const usersByID = computed(() => Object.fromEntries((store.users || []).map(u => [u.id, u])))
 const authorName = computed(() => q.value ? (usersByID.value[q.value.userId]?.name || '') : '')
-const authorPhoto = computed(() => q.value ? (usersByID.value[q.value.userId]?.photoB64 || '') : '')
+const authorPhoto = computed(() => {
+  if (!q.value) return ''
+  const u = usersByID.value[q.value.userId]
+  if (!u) return ''
+  return imageUrl(u.photoImageId, 'thumb')
+})
 
 const answersWithUsers = computed(() => {
-  return (store.answers || []).map(a => ({
-    ...a,
-    name: usersByID.value[a.userId]?.name || '...',
-    photo: usersByID.value[a.userId]?.photoB64 || '',
-  })).sort((a, b) => b.points - a.points || a.responseMs - b.responseMs)
+  return (store.answers || []).map(a => {
+    const u = usersByID.value[a.userId]
+    return {
+      ...a,
+      name: u?.name || '...',
+      photo: imageUrl(u?.photoImageId, 'thumb'),
+    }
+  }).sort((a, b) => b.points - a.points || a.responseMs - b.responseMs)
 })
 
 const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myId.value))

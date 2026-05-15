@@ -2,22 +2,40 @@ package api
 
 import (
 	"context"
+	"io"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/game"
+	"github.com/oglimmer/trivia/backend/internal/images"
 	"github.com/oglimmer/trivia/backend/internal/mail"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
+// ImageStore is the slice of *images.Service the API needs. Kept as an
+// interface so handler tests can swap in an in-memory fake without standing
+// up a real pgx pool.
+type ImageStore interface {
+	Store(ctx context.Context, r io.Reader) (string, error)
+	Get(ctx context.Context, id string) (*images.Blob, error)
+	GetVariant(ctx context.Context, id, kind string) (*images.Blob, error)
+	DeleteOrphans(ctx context.Context, olderThan time.Time) (int64, error)
+}
+
+// orphanImageGrace is how long an unreferenced image is kept before it's
+// considered abandoned and eligible for cleanup. Long enough for the
+// upload→join/putQuestion round-trip even on a slow client.
+const orphanImageGrace = 1 * time.Hour
+
 // Server is the HTTP API plus the live WebSocket hub.
 type Server struct {
-	DB   Store
-	Hub  *ws.Hub
-	AI   *ai.Client
-	Mail *mail.Mailer
+	DB     Store
+	Hub    *ws.Hub
+	AI     *ai.Client
+	Mail   *mail.Mailer
+	Images ImageStore
 
 	// gameLocks serializes admin transitions per game.
 	mu        sync.Mutex
@@ -27,6 +45,11 @@ type Server struct {
 	// cancel it if the admin reveals/advances first.
 	autoCloseMu sync.Mutex
 	autoClose   map[string]*time.Timer
+
+	// broadcastUsersDeb coalesces bursty broadcastUsers calls per game
+	// (e.g. 100 players joining at once) into a single fire ~200ms later.
+	broadcastUsersDebMu sync.Mutex
+	broadcastUsersDeb   map[string]*time.Timer
 }
 
 func New(d Store, h *ws.Hub, c *ai.Client, m *mail.Mailer) *Server {
@@ -35,13 +58,49 @@ func New(d Store, h *ws.Hub, c *ai.Client, m *mail.Mailer) *Server {
 	}
 	s := &Server{
 		DB: d, Hub: h, AI: c, Mail: m,
-		gameLocks: map[string]*sync.Mutex{},
-		autoClose: map[string]*time.Timer{},
+		gameLocks:         map[string]*sync.Mutex{},
+		autoClose:         map[string]*time.Timer{},
+		broadcastUsersDeb: map[string]*time.Timer{},
 	}
 	h.OnRecv = s.onWSMessage
 	h.OnJoin = s.onWSJoin
 	h.OnLeave = s.onWSLeave
 	return s
+}
+
+// orphanImageGCInterval is how often the background cleanup runs. Cheap enough
+// to do often, but no point being chatty when uploads are rare.
+const orphanImageGCInterval = 15 * time.Minute
+
+// RunOrphanImageGC periodically deletes unreferenced images older than the
+// grace period. Returns when ctx is cancelled so callers can drive shutdown.
+func (s *Server) RunOrphanImageGC(ctx context.Context) {
+	t := time.NewTicker(orphanImageGCInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			s.deleteOrphanImages(ctx, now.Add(-orphanImageGrace))
+		}
+	}
+}
+
+// deleteOrphanImages runs one sweep. Errors are logged, not returned: this is
+// best-effort housekeeping and a transient DB hiccup shouldn't kill the loop.
+func (s *Server) deleteOrphanImages(ctx context.Context, olderThan time.Time) {
+	if s.Images == nil {
+		return
+	}
+	n, err := s.Images.DeleteOrphans(ctx, olderThan)
+	if err != nil {
+		log.Printf("orphan image cleanup: %v", err)
+		return
+	}
+	if n > 0 {
+		log.Printf("orphan image cleanup: removed %d", n)
+	}
 }
 
 // ResumeAutoCloseTimers re-arms pending auto-close timers at startup so a
@@ -91,6 +150,26 @@ func (s *Server) scheduleAutoClose(gameID, questionID string, d time.Duration) {
 	}
 	s.autoClose[gameID] = time.AfterFunc(d, func() {
 		s.autoCloseFire(gameID, questionID)
+	})
+}
+
+// broadcastUsersDebounced coalesces calls per gameID into a single
+// broadcastUsers fire ~200ms after the last call, so a burst of player
+// registrations does not produce N² broadcast traffic.
+func (s *Server) broadcastUsersDebounced(_ context.Context, gameID string) {
+	s.broadcastUsersDebMu.Lock()
+	defer s.broadcastUsersDebMu.Unlock()
+	if t, ok := s.broadcastUsersDeb[gameID]; ok {
+		t.Stop()
+	}
+	s.broadcastUsersDeb[gameID] = time.AfterFunc(200*time.Millisecond, func() {
+		s.broadcastUsersDebMu.Lock()
+		delete(s.broadcastUsersDeb, gameID)
+		s.broadcastUsersDebMu.Unlock()
+
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.broadcastUsers(bgCtx, gameID)
 	})
 }
 

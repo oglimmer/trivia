@@ -1,0 +1,2 @@
+ALTER TABLE users     DROP COLUMN IF EXISTS photo_b64;
+ALTER TABLE questions DROP COLUMN IF EXISTS photo_b64;

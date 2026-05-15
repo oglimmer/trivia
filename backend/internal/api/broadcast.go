@@ -34,12 +34,12 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 		q, err := s.DB.QuestionByID(ctx, *g.CurrentQuestionID)
 		if err == nil {
 			qd := map[string]any{
-				"id":         q.ID,
-				"text":       q.Text,
-				"photoB64":   q.PhotoB64,
-				"answerType": q.AnswerType,
-				"options":    q.Options,
-				"userId":     q.UserID,
+				"id":           q.ID,
+				"text":         q.Text,
+				"photoImageId": q.PhotoImageID,
+				"answerType":   q.AnswerType,
+				"options":      q.Options,
+				"userId":       q.UserID,
 			}
 			if asAdmin || g.QuestionState == "revealed" {
 				qd["correct"] = q.Correct
