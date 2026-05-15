@@ -12,6 +12,7 @@ import Impersonate from './pages/Impersonate.vue'
 import Imprint from './pages/Imprint.vue'
 import Privacy from './pages/Privacy.vue'
 import Terms from './pages/Terms.vue'
+import Developers from './pages/Developers.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,6 +30,7 @@ const router = createRouter({
     { path: '/imprint', component: Imprint },
     { path: '/privacy', component: Privacy },
     { path: '/terms', component: Terms },
+    { path: '/developers', component: Developers },
   ],
 })
 

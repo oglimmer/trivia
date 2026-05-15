@@ -29,6 +29,8 @@
       <span class="foot__dot" aria-hidden="true">·</span>
       <RouterLink class="foot__link" to="/terms">Terms</RouterLink>
       <span class="foot__dot" aria-hidden="true">·</span>
+      <RouterLink class="foot__link" to="/developers">Developers</RouterLink>
+      <span class="foot__dot" aria-hidden="true">·</span>
       <button
         type="button"
         class="foot__infoBtn"
