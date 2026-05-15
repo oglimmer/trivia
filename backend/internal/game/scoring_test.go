@@ -46,7 +46,7 @@ func TestTimeBonusDecays(t *testing.T) {
 	_, fast := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 0)
 	_, mid := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 15_000)
 	_, slow := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 30_000)
-	if !(fast > mid && mid > slow) {
+	if fast <= mid || mid <= slow {
 		t.Fatalf("expected monotonic decay, got fast=%d mid=%d slow=%d", fast, mid, slow)
 	}
 	if slow != 200 {

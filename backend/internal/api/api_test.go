@@ -143,7 +143,7 @@ func TestRandomTokenLength(t *testing.T) {
 			t.Errorf("randomToken(%d) len = %d, want %d", n, len(got), 2*n)
 		}
 		for _, ch := range got {
-			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+			if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
 				t.Fatalf("randomToken produced non-hex char %q in %q", ch, got)
 			}
 		}

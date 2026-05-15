@@ -24,7 +24,7 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "expected multipart field 'file'")
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	id, err := s.Images.Store(r.Context(), f)
 	if err != nil {

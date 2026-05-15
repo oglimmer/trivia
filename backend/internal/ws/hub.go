@@ -215,7 +215,7 @@ func (c *Client) writeLoop(ctx context.Context) {
 }
 
 func (c *Client) readLoop() {
-	defer c.conn.Close()
+	defer func() { _ = c.conn.Close() }()
 	c.conn.SetReadLimit(10 * 1024 * 1024)
 	_ = c.conn.SetReadDeadline(time.Now().Add(75 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
