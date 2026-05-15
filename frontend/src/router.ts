@@ -9,6 +9,9 @@ import AdminGames from './pages/AdminGames.vue'
 import AdminGame from './pages/AdminGame.vue'
 import AdminUsers from './pages/AdminUsers.vue'
 import Impersonate from './pages/Impersonate.vue'
+import Imprint from './pages/Imprint.vue'
+import Privacy from './pages/Privacy.vue'
+import Terms from './pages/Terms.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -23,6 +26,9 @@ const router = createRouter({
     { path: '/admin/users', component: AdminUsers },
     { path: '/admin/games/:code', component: AdminGame, props: true },
     { path: '/impersonate', component: Impersonate },
+    { path: '/imprint', component: Imprint },
+    { path: '/privacy', component: Privacy },
+    { path: '/terms', component: Terms },
   ],
 })
 

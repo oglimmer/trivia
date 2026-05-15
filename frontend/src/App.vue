@@ -22,36 +22,48 @@
         <a class="foot__link" href="https://github.com/oglimmer/trivia/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
       </span>
     </div>
-    <div class="foot__versions" aria-label="Build information">
-      <span class="foot__ver"><span class="foot__verLabel">frontend</span> v{{ frontend.version }} · {{ frontend.gitCommit }} · {{ dateOnly(frontend.buildTime) }}</span>
-      <span class="foot__sep">·</span>
-      <span class="foot__ver"><span class="foot__verLabel">backend</span> {{ backendLine }}</span>
+    <div class="foot__legal">
+      <RouterLink class="foot__link" to="/imprint">Imprint</RouterLink>
+      <span class="foot__dot" aria-hidden="true">·</span>
+      <RouterLink class="foot__link" to="/privacy">Privacy</RouterLink>
+      <span class="foot__dot" aria-hidden="true">·</span>
+      <RouterLink class="foot__link" to="/terms">Terms</RouterLink>
+      <span class="foot__dot" aria-hidden="true">·</span>
+      <button
+        type="button"
+        class="foot__infoBtn"
+        aria-label="Show build info"
+        @click="openBuildInfo"
+      >
+        <svg class="foot__infoIcon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+          <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13z M8 7v4.5 M8 4.6v.1" />
+        </svg>
+      </button>
     </div>
   </footer>
 
   <ConfirmDialog />
   <ProfileDialog :open="editing" @close="editing = false" />
+  <BuildInfoDialog :open="buildInfoOpen" @close="buildInfoOpen = false" />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterView } from 'vue-router'
+import { ref } from 'vue'
+import { RouterView, RouterLink } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ProfileDialog from '@/components/ProfileDialog.vue'
+import BuildInfoDialog from '@/components/BuildInfoDialog.vue'
 import { useBuildInfo } from '@/composables/useBuildInfo'
 
 const editing = ref(false)
+const buildInfoOpen = ref(false)
 
-const { frontend, backend, load } = useBuildInfo()
-onMounted(() => { load() })
+const { load } = useBuildInfo()
 
-function dateOnly(s: string): string {
-  return /^\d{4}-\d{2}-\d{2}T/.test(s) ? s.slice(0, 10) : s
+function openBuildInfo() {
+  load()
+  buildInfoOpen.value = true
 }
-
-const backendLine = computed(() => {
-  if (!backend.value) return '…'
-  return `v${backend.value.version} · ${backend.value.gitCommit} · ${dateOnly(backend.value.buildTime)}`
-})
 </script>
