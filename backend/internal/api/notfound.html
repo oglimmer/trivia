@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>404 — Page not found</title>
+<style>
+  :root {
+    --paper:   #FFFFFF;
+    --cream:   #FFF7E6;
+    --cream-2: #FBEFD0;
+    --ink:     #1A1B26;
+    --ink-soft:#3A3B4A;
+    --muted:   #6B6B7A;
+    --pink:    #FF4D8D;
+    --pink-2:  #FFD8E5;
+    --yellow:  #FFD23F;
+    --yellow-2:#FFF1B3;
+    --blue-2:  #D9E7FF;
+    --mint:    #4ECDC4;
+    --mint-2:  #CFF1EE;
+    --coral:   #FF6B6B;
+    --r:    16px;
+    --r-lg: 22px;
+    --r-xl: 28px;
+    --bw:   2.5px;
+    --shadow-1: 4px 4px 0 var(--ink);
+    --shadow-2: 6px 6px 0 var(--ink);
+    --shadow-3: 8px 8px 0 var(--ink);
+    --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif;
+    --font-ui: "ui-rounded", "SF Pro Rounded", -apple-system, "Hiragino Maru Gothic ProN", "Nunito",
+               "Segoe UI", system-ui, sans-serif;
+    --font-mono: "ui-monospace", "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-weight: 500;
+    color: var(--ink);
+    background-color: var(--cream);
+    background-image:
+      radial-gradient(circle at 12% 8%,  rgba(255, 210, 63, .55) 0, transparent 35%),
+      radial-gradient(circle at 92% 14%, rgba(255, 77, 141, .45) 0, transparent 38%),
+      radial-gradient(circle at 80% 95%, rgba(58, 134, 255, .35) 0, transparent 45%),
+      radial-gradient(circle at 5% 95%,  rgba(78, 205, 196, .45) 0, transparent 45%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      radial-gradient(circle at 18% 22%, var(--ink) 1.5px, transparent 2px),
+      radial-gradient(circle at 78% 28%, var(--ink) 1.5px, transparent 2px),
+      radial-gradient(circle at 32% 76%, var(--ink) 1.5px, transparent 2px),
+      radial-gradient(circle at 88% 70%, var(--ink) 1.5px, transparent 2px),
+      radial-gradient(circle at 50% 50%, var(--ink) 1.2px, transparent 2px);
+    background-size: 280px 280px;
+    opacity: .08;
+  }
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 18px calc(env(safe-area-inset-bottom) + 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .hero {
+    position: relative;
+    padding: 36px 22px 28px;
+    text-align: center;
+    background: var(--pink-2);
+    border: var(--bw) solid var(--ink);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-3);
+    overflow: hidden;
+  }
+  .hero__eyebrow {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--ink);
+    color: var(--yellow);
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: .78rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .hero__title {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 900;
+    font-size: clamp(2.4rem, 9vw, 3.4rem);
+    line-height: .95;
+    letter-spacing: -.02em;
+    margin: 0 0 .1em;
+    color: var(--ink);
+  }
+  .hero__title em {
+    font-style: italic;
+    background: var(--pink);
+    color: var(--paper);
+    padding: 0 .12em;
+    display: inline-block;
+    transform: rotate(-2deg);
+    border: var(--bw) solid var(--ink);
+    border-radius: 8px;
+  }
+  .hero__subtitle {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    margin: 12px 0 0;
+    line-height: 1.45;
+  }
+  .hero__sparkle {
+    position: absolute;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 900;
+    color: var(--ink);
+    opacity: .55;
+  }
+  .s1 { top: 14px; left: 18px; font-size: 1.6rem; transform: rotate(-10deg); }
+  .s2 { bottom: 12px; right: 22px; font-size: 1.4rem; transform: rotate(14deg); }
+  .s3 { top: 22%; right: 14px; font-size: 1rem; }
+
+  .code {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 10px;
+    margin: 6px 0 14px;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .digit {
+    font-size: clamp(4rem, 18vw, 7rem);
+    color: var(--ink);
+    background: var(--paper);
+    border: var(--bw) solid var(--ink);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-2);
+    padding: 6px 18px 10px;
+    transform: rotate(-4deg);
+  }
+  .digit:nth-child(2) { transform: rotate(3deg); }
+  .digit:nth-child(3) { transform: rotate(-2deg); }
+  .digit--ball {
+    background: var(--yellow);
+    border-radius: 50%;
+    padding: 6px 22px 10px;
+    animation: bob 2.4s ease-in-out infinite;
+  }
+  @keyframes bob {
+    0%, 100% { transform: rotate(3deg) translateY(0); }
+    50%      { transform: rotate(3deg) translateY(-6px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .digit--ball { animation: none; }
+  }
+  .path {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 1px 8px;
+    word-break: break-all;
+  }
+
+  .card {
+    background: var(--paper);
+    border: var(--bw) solid var(--ink);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-2);
+    padding: 22px;
+    text-align: center;
+  }
+  .card > p { margin: 0 0 14px; color: var(--muted); }
+  .actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: var(--font-ui);
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: .01em;
+    padding: 18px 22px;
+    background: var(--paper);
+    color: var(--ink);
+    border: var(--bw) solid var(--ink);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-2);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .btn:hover { transform: translate(-1px, -1px); box-shadow: 8px 8px 0 var(--ink); }
+  .btn:active { transform: translate(4px, 4px); box-shadow: 2px 2px 0 var(--ink); }
+  .btn--primary { background: var(--pink); color: var(--paper); }
+  .btn--ghost {
+    background: transparent;
+    font-size: 1rem;
+    padding: 14px 18px;
+    box-shadow: var(--shadow-1);
+  }
+  .btn--ghost:hover { box-shadow: 5px 5px 0 var(--ink); background: var(--cream-2); }
+  .btn--ghost:active { box-shadow: 1px 1px 0 var(--ink); }
+</style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <span class="hero__sparkle s1" aria-hidden="true">✦</span>
+      <span class="hero__sparkle s2" aria-hidden="true">✦</span>
+      <span class="hero__sparkle s3" aria-hidden="true">★</span>
+
+      <span class="hero__eyebrow">Lost in space</span>
+      <div class="code" aria-hidden="true">
+        <span class="digit">4</span>
+        <span class="digit digit--ball">0</span>
+        <span class="digit">4</span>
+      </div>
+      <h1 class="hero__title">Page <em>not</em> found.</h1>
+      <p class="hero__subtitle">
+        We couldn't find <code class="path">{{.Path}}</code>.<br />
+        Maybe a typo in the link, or it moved on without telling us.
+      </p>
+    </section>
+
+    <section class="card">
+      <p>Try one of these instead:</p>
+      <div class="actions">
+        <a href="/" class="btn btn--primary">← Back to home</a>
+        <a href="/admin" class="btn btn--ghost">Open admin</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

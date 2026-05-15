@@ -11,6 +11,8 @@ import (
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 
+	r.NotFound(s.notFoundHandler)
+
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 
 	r.Route("/api", func(r chi.Router) {

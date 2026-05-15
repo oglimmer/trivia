@@ -13,6 +13,7 @@ import Imprint from './pages/Imprint.vue'
 import Privacy from './pages/Privacy.vue'
 import Terms from './pages/Terms.vue'
 import Developers from './pages/Developers.vue'
+import NotFound from './pages/NotFound.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -31,6 +32,7 @@ const router = createRouter({
     { path: '/privacy', component: Privacy },
     { path: '/terms', component: Terms },
     { path: '/developers', component: Developers },
+    { path: '/:pathMatch(.*)*', component: NotFound },
   ],
 })
 
