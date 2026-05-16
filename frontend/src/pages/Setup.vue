@@ -179,13 +179,20 @@
         </div>
 
         <div class="row">
-          <button class="btn-primary btn-lg flex-1" :disabled="!canSubmit || loading" @click="save">
+          <button ref="saveBtnRef" class="btn-primary btn-lg flex-1" :disabled="!canSubmit || loading" @click="save">
             {{ loading ? 'Saving…' : (saved ? 'Update question' : 'Save question') }}
           </button>
           <button v-if="saved" class="btn-ghost" @click="cancelEdit">Cancel</button>
         </div>
         <div v-if="err" class="error">{{ err }}</div>
       </div>
+    </transition>
+
+    <transition name="fade">
+      <button v-if="showSaveHint" class="save-hint" type="button" @click="scrollToSave">
+        <span>Scroll down to save your question</span>
+        <span class="save-hint__arrow" aria-hidden="true">↓</span>
+      </button>
     </transition>
 
     <transition name="fade">
@@ -247,6 +254,9 @@ const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
 const initialReady = ref(false)
 const nowMs = ref(Date.now())
 let clockTimer: ReturnType<typeof setInterval> | null = null
+const saveBtnRef = ref<HTMLButtonElement | null>(null)
+const showSaveHint = ref(false)
+let saveBtnObserver: IntersectionObserver | null = null
 
 const lockedEmail = ref('')
 const savingEmail = ref(false)
@@ -323,7 +333,32 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
+  saveBtnObserver?.disconnect()
 })
+
+function armSaveHint() {
+  saveBtnObserver?.disconnect()
+  showSaveHint.value = true
+  nextTick(() => {
+    const el = saveBtnRef.value
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    saveBtnObserver = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) {
+        showSaveHint.value = false
+        saveBtnObserver?.disconnect()
+        saveBtnObserver = null
+      }
+    }, { threshold: 0.5 })
+    saveBtnObserver.observe(el)
+  })
+}
+
+function scrollToSave() {
+  showSaveHint.value = false
+  saveBtnObserver?.disconnect()
+  saveBtnObserver = null
+  saveBtnRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 
 watch(() => store.game && store.game.state, (s) => {
   if (s === 'game') router.replace(`/g/${props.code}/play`)
@@ -376,6 +411,7 @@ async function useAIPath() {
       correctIdx.value = Number(r.correct) || 0
     }
     step.value = 'editor'
+    armSaveHint()
   } catch (e) {
     err.value = 'AI: ' + errMsg(e, 'failed')
   } finally {
@@ -491,6 +527,52 @@ async function confirmAI() {
 .email-offer__sent {
   font-weight: 800;
   color: var(--ink);
+}
+.save-hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 28px;
+  background: var(--yellow);
+  color: var(--ink);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: 6px 6px 0 var(--ink);
+  font-weight: 800;
+  font-size: 1.1rem;
+  text-align: center;
+  line-height: 1.3;
+  cursor: pointer;
+  max-width: calc(100vw - 32px);
+  animation: save-hint-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.save-hint:active {
+  transform: translate(calc(-50% + 2px), calc(-50% + 2px));
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.save-hint__arrow {
+  display: inline-block;
+  font-size: 2rem;
+  line-height: 1;
+  animation: save-hint-bounce 1s infinite ease-in-out;
+}
+@keyframes save-hint-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+@keyframes save-hint-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-hint__arrow,
+  .save-hint { animation: none; }
 }
 .sr-only {
   position: absolute;
