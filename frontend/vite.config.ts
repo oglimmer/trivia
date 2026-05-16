@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { execSync } from 'node:child_process'
@@ -38,5 +39,11 @@ export default defineConfig({
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
       '/ws':  { target: 'ws://localhost:8080',  ws: true, changeOrigin: true },
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.ts'],
+    setupFiles: ['src/test/setup.ts'],
   },
 })

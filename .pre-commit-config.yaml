@@ -54,3 +54,10 @@ repos:
         language: system
         files: ^frontend/(src/.*\.(ts|tsx|vue|mts)|tsconfig.*\.json)$
         pass_filenames: false
+
+      - id: vitest
+        name: vitest
+        entry: bash -c 'cd frontend && npm test --silent'
+        language: system
+        files: ^frontend/(src/.*\.(ts|tsx|vue|mts)|vite\.config\.ts|package\.json)$
+        pass_filenames: false
