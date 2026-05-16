@@ -39,6 +39,7 @@ services:
       SMTP_FROM: ${SMTP_FROM:-noreply@oglimmer.com}
       SMTP_REPLY_EMAIL: ${SMTP_REPLY_EMAIL:-noreply@oglimmer.com}
       SMTP_REPLY_NAME: ${SMTP_REPLY_NAME:-Trivia-Helper}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       PORT: 8080
     depends_on:
       db:

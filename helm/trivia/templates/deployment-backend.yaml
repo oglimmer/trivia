@@ -114,6 +114,12 @@ spec:
               name: {{ include "trivia.secretName" . }}
               key: SMTP_PASSWORD
               optional: true
+        - name: METRICS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "trivia.secretName" . }}
+              key: METRICS_TOKEN
+              optional: true
         startupProbe:
           httpGet:
             path: /health

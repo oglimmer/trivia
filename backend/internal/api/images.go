@@ -35,6 +35,9 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if s.Metrics != nil {
+		s.Metrics.ImagesUploaded.Inc()
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 

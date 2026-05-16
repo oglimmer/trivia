@@ -11,6 +11,7 @@ import (
 	"github.com/oglimmer/trivia/backend/internal/game"
 	"github.com/oglimmer/trivia/backend/internal/images"
 	"github.com/oglimmer/trivia/backend/internal/mail"
+	"github.com/oglimmer/trivia/backend/internal/metrics"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
@@ -31,11 +32,12 @@ const orphanImageGrace = 1 * time.Hour
 
 // Server is the HTTP API plus the live WebSocket hub.
 type Server struct {
-	DB     Store
-	Hub    *ws.Hub
-	AI     *ai.Client
-	Mail   *mail.Mailer
-	Images ImageStore
+	DB      Store
+	Hub     *ws.Hub
+	AI      *ai.Client
+	Mail    *mail.Mailer
+	Images  ImageStore
+	Metrics *metrics.Metrics
 
 	// gameLocks serializes admin transitions per game.
 	mu        sync.Mutex
@@ -100,6 +102,9 @@ func (s *Server) deleteOrphanImages(ctx context.Context, olderThan time.Time) {
 	}
 	if n > 0 {
 		log.Printf("orphan image cleanup: removed %d", n)
+		if s.Metrics != nil {
+			s.Metrics.OrphansDeleted.Add(float64(n))
+		}
 	}
 }
 
@@ -205,6 +210,9 @@ func (s *Server) autoCloseFire(gameID, questionID string) {
 	if err := s.DB.CloseQuestion(ctx, gameID); err != nil {
 		log.Printf("auto-close: %v", err)
 		return
+	}
+	if s.Metrics != nil {
+		s.Metrics.QuestionsAutoClose.Inc()
 	}
 	s.broadcastGameState(ctx, gameID)
 }

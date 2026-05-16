@@ -342,6 +342,9 @@ func (s *Server) activateQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if s.Metrics != nil {
+		s.Metrics.QuestionsActivated.Inc()
+	}
 	if g.QuestionTimeoutSeconds > 0 {
 		s.scheduleAutoClose(g.ID, qID, time.Duration(g.QuestionTimeoutSeconds)*time.Second)
 	} else {
@@ -369,6 +372,9 @@ func (s *Server) revealQuestion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if s.Metrics != nil {
+		s.Metrics.QuestionsRevealed.Inc()
+	}
 	s.cancelAutoClose(g.ID)
 	s.broadcastGameState(r.Context(), g.ID)
 	w.WriteHeader(204)
@@ -394,6 +400,9 @@ func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {
 	if err := s.DB.ActivateQuestion(r.Context(), g.ID, next.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if s.Metrics != nil {
+		s.Metrics.QuestionsActivated.Inc()
 	}
 	if g.QuestionTimeoutSeconds > 0 {
 		s.scheduleAutoClose(g.ID, next.ID, time.Duration(g.QuestionTimeoutSeconds)*time.Second)

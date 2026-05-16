@@ -17,6 +17,7 @@ import (
 	"github.com/oglimmer/trivia/backend/internal/db"
 	"github.com/oglimmer/trivia/backend/internal/images"
 	"github.com/oglimmer/trivia/backend/internal/mail"
+	"github.com/oglimmer/trivia/backend/internal/metrics"
 	"github.com/oglimmer/trivia/backend/internal/ws"
 )
 
@@ -40,6 +41,33 @@ func main() {
 	hub := ws.NewHub()
 	srv := api.New(d, hub, ai.New(), mail.FromEnv())
 	srv.Images = images.New(d.Pool)
+
+	// Prometheus metrics. Gauges that depend on live state are pulled on
+	// scrape via closures so the metrics package doesn't import api/ws/db.
+	mx := metrics.New(metrics.Options{
+		OnlinePlayers: func() int {
+			n := 0
+			for _, c := range hub.OnlinePlayerCounts() {
+				n += c
+			}
+			return n
+		},
+		GamesByState: func() map[string]int {
+			out := map[string]int{"setup": 0, "game": 0, "finished": 0}
+			gctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			gs, err := d.ListGames(gctx)
+			if err != nil {
+				return out
+			}
+			for _, g := range gs {
+				out[g.State]++
+			}
+			return out
+		},
+	})
+	srv.Metrics = mx
+
 	srv.ResumeAutoCloseTimers(ctx)
 
 	gcCtx, cancelGC := context.WithCancel(ctx)
@@ -54,6 +82,10 @@ func main() {
 	})
 
 	root := http.NewServeMux()
+	// /metrics is mounted at the root mux, outside the CORS and request-log
+	// wrappers, so scrapes don't pollute access logs and the endpoint isn't
+	// CORS-exposed to browsers. Token check happens inside the handler.
+	root.Handle("/metrics", mx.Handler(os.Getenv("METRICS_TOKEN")))
 	root.Handle("/", corsMW(middleware.Logger(srv.Routes())))
 
 	port := os.Getenv("PORT")

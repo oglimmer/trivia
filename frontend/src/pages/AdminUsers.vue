@@ -63,26 +63,7 @@
       </div>
     </div>
 
-    <transition name="dialog">
-      <div
-        v-if="previewImage"
-        class="img-preview-backdrop"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Photo preview"
-        @mousedown.self="previewImage = ''"
-        @keydown.esc.prevent="previewImage = ''"
-        tabindex="-1"
-      >
-        <button
-          type="button"
-          class="img-preview-close"
-          aria-label="Close preview"
-          @click="previewImage = ''"
-        >×</button>
-        <img class="img-preview-img" :src="previewImage" alt="" />
-      </div>
-    </transition>
+    <ImagePreviewModal :src="previewImage" @close="previewImage = ''" />
   </main>
 </template>
 
@@ -92,6 +73,7 @@ import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { errMsg } from '@/composables/errMsg'
+import ImagePreviewModal from '@/components/ImagePreviewModal.vue'
 import type { AdminAllUser } from '@/types'
 
 const users = ref<AdminAllUser[]>([])
@@ -201,42 +183,4 @@ onMounted(async () => {
   background: var(--yellow);
 }
 
-.img-preview-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(26, 27, 38, .85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 1100;
-  cursor: zoom-out;
-}
-.img-preview-img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border: var(--bw) solid var(--ink);
-  border-radius: var(--r-lg);
-  background: var(--paper);
-  box-shadow: var(--shadow-3);
-  cursor: default;
-}
-.img-preview-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: var(--bw) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--shadow-1);
-}
-.img-preview-close:hover { background: var(--coral); color: var(--paper); }
 </style>

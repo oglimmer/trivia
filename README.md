@@ -38,6 +38,7 @@ The backend auto-runs `migrations/*.sql` on boot. Re-running them is safe (every
 | `SMTP_FROM`          | `noreply@oglimmer.com`      | RFC 5322 `From:` address.                        |
 | `SMTP_REPLY_EMAIL`   | `noreply@oglimmer.com`      | `Reply-To:` address.                             |
 | `SMTP_REPLY_NAME`    | `Trivia-Helper`             | Display name for the reply address.              |
+| `METRICS_TOKEN`      | (empty)                     | Bearer token required to scrape `/metrics`. Empty disables the endpoint (returns 404). |
 
 The frontend proxies `/api` and `/ws` to the backend via nginx (prod) and Vite (dev), so the app is served from a single origin.
 
@@ -230,6 +231,9 @@ Admin (`Authorization: Bearer <jwt>`):
 - `DELETE /api/admin/games/{code}/users/{userId}` (setup only)
 - `GET    /api/admin/games/{code}/users/{userId}/impersonate` — returns that player's token + a deep-link the host can hand them
 - `DELETE /api/admin/games/{code}/questions/{questionId}` (setup only)
+
+Observability:
+- `GET /metrics` — Prometheus exposition. Mounted on the root mux outside CORS/access-log middleware. Requires `Authorization: Bearer $METRICS_TOKEN`; when `METRICS_TOKEN` is unset the endpoint returns 404 (fail-closed). Exposes the standard Go runtime + process collectors plus app metrics under the `trivia_` namespace: `trivia_http_requests_total{method,path,status}` and `trivia_http_request_duration_seconds` (path is the chi route pattern, so URL params don't blow up label cardinality), `trivia_http_in_flight_requests`, `trivia_ws_connections{role}`, `trivia_game_count{state}`, `trivia_game_online_players`, `trivia_game_answers_submitted_total{result}`, `trivia_game_questions_{activated,revealed,auto_closed}_total`, `trivia_ai_suggest_requests_total{result}` + `_duration_seconds`, `trivia_images_{uploaded,orphans_deleted}_total`, and a `trivia_build_info` info-gauge. The Helm chart wires `METRICS_TOKEN` from the sealed secret as an optional key — add a sealed entry to enable scraping in prod.
 
 WebSocket at `/ws`:
 - Player: `?token=<playerToken>`

@@ -29,14 +29,7 @@
         <template v-else>
           <div class="card stack">
             <h1>Final standings</h1>
-            <ol class="ladder">
-              <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
-                <span class="rank">{{ i + 1 }}</span>
-                <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
-                <span class="bold">{{ s.userName }}</span>
-                <span class="pts">{{ s.points }}</span>
-              </li>
-            </ol>
+            <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
           </div>
         </template>
       </div>
@@ -52,8 +45,8 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { playerApi } from '@/services/api'
-import { imageUrl } from '@/services/images'
 import Spotlight from '@/components/Spotlight.vue'
+import Leaderboard from '@/components/Leaderboard.vue'
 
 const props = defineProps<{ code: string }>()
 const store = useGameStore()

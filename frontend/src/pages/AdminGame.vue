@@ -56,83 +56,24 @@
 
     <!-- SETUP MODE -->
     <template v-if="game?.state === 'setup'">
-      <div class="card card--cream">
-        <div class="row between" style="margin-bottom: 12px;">
-          <h2 style="margin: 0;">Submissions</h2>
-          <span class="tag tag--yellow">{{ questions.length }}</span>
-        </div>
-        <div class="stack">
-          <div v-for="q in questions" :key="q.id" class="card card--flat" style="background: var(--paper); border: 2px solid var(--ink); padding: 14px;">
-            <div class="row" style="gap: 12px; align-items: flex-start;">
-              <button
-                type="button"
-                class="avatar-btn"
-                @click="previewImage = imageUrl(q.photoImageId, 'orig')"
-                :aria-label="`Preview photo by ${userName(q.userId)}`"
-                title="Click to preview"
-              >
-                <img class="avatar" :src="imageUrl(q.photoImageId, 'thumb')" alt="" loading="lazy" decoding="async" />
-              </button>
-              <div style="flex: 1; min-width: 0;">
-                <div class="bold">{{ q.text }}</div>
-                <div class="muted" style="font-size: .85rem;">
-                  <span class="kbd" style="padding: 1px 6px; font-size: .75rem;">{{ q.answerType }}</span>
-                  · by {{ userName(q.userId) }}
-                </div>
-              </div>
-              <button class="btn-danger btn-sm btn-icon-sm" :disabled="deletingQuestion === q.id" @click="removeQuestion(q)" :aria-label="`Delete submission by ${userName(q.userId)}`" :title="`Delete submission`">
-                <span v-if="deletingQuestion === q.id">…</span>
-                <span v-else aria-hidden="true">🗑</span>
-              </button>
-            </div>
-            <details style="margin-top: 10px;">
-              <summary class="bold" style="cursor: pointer;">Reveal answer</summary>
-              <div v-if="q.answerType === 'choice'" class="stack" style="margin-top: 8px;">
-                <div
-                  v-for="(o, i) in q.options"
-                  :key="i"
-                  :class="['option-btn', i === Number(q.correct) && 'correct']"
-                >
-                  <span class="option-btn__bullet">{{ letters[i] }}</span>{{ o }}
-                </div>
-              </div>
-              <div v-else class="card card--mint" style="padding: 12px; margin-top: 8px; text-align: center;">
-                <span class="bold" style="font-family: var(--font-display); font-style: italic; font-size: 1.4rem;">{{ q.correct }}</span>
-              </div>
-            </details>
-          </div>
-          <div v-if="questions.length === 0" class="muted center">No submissions yet.</div>
-        </div>
-      </div>
+      <QuestionSubmissions
+        :questions="questions"
+        :users="users"
+        :deleting-id="deletingQuestion"
+        @preview="previewImage = $event"
+        @delete="removeQuestion"
+      />
 
-      <div class="card">
-        <div class="row between" style="margin-bottom: 12px;">
-          <h2 style="margin: 0;">Players</h2>
-          <span class="tag tag--blue">{{ onlineCount }} / {{ users.length }} online</span>
-        </div>
-        <ul class="ladder">
-          <li v-for="u in users" :key="u.id">
-            <span class="avatar-wrap">
-              <img class="avatar" :src="imageUrl(u.photoImageId, 'thumb')" :alt="u.name" loading="lazy" decoding="async" />
-              <span class="presence-dot" :class="{ 'presence-dot--on': online.has(u.id) }" :title="online.has(u.id) ? 'Online' : 'Offline'"></span>
-            </span>
-            <span class="bold" :class="{ 'muted': !online.has(u.id) }">{{ u.name }}</span>
-            <span class="pts" :style="`color: ${hasQuestion(u.id) ? 'var(--mint)' : 'var(--muted)'};`">
-              {{ hasQuestion(u.id) ? '✓ ready' : 'thinking…' }}
-            </span>
-            <button class="btn-ghost btn-sm btn-icon-sm" :disabled="copyingUser === u.id" @click="copyImpersonateLink(u)" style="margin-left: auto;" :aria-label="`Copy login link for ${u.name}`" :title="`Copy a link that signs you in as ${u.name}`">
-              <span v-if="copyingUser === u.id">…</span>
-              <span v-else-if="copiedUser === u.id" aria-hidden="true">✓</span>
-              <span v-else aria-hidden="true">🔗</span>
-            </button>
-            <button class="btn-danger btn-sm btn-icon-sm" :disabled="deletingUser === u.id" @click="removeUser(u)" :aria-label="`Remove ${u.name}`" title="Remove player">
-              <span v-if="deletingUser === u.id">…</span>
-              <span v-else aria-hidden="true">🗑</span>
-            </button>
-          </li>
-          <li v-if="!users.length" class="muted center" style="justify-content: center;">No players yet.</li>
-        </ul>
-      </div>
+      <PlayersList
+        :users="users"
+        :online="online"
+        :ready-ids="readyUserIds"
+        :copying-id="copyingUser"
+        :copied-id="copiedUser"
+        :deleting-id="deletingUser"
+        @copy="copyImpersonateLink"
+        @delete="removeUser"
+      />
     </template>
 
     <!-- GAME MODE -->
@@ -192,15 +133,7 @@
 
       <div class="card">
         <h2>Leaderboard</h2>
-        <ol class="ladder">
-          <li v-for="(s, i) in leaderboard" :key="s.userId">
-            <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
-            <span class="bold">{{ s.userName }}</span>
-            <span class="pts">{{ s.points }}</span>
-          </li>
-          <li v-if="!leaderboard.length" class="muted center" style="justify-content: center;">Scores will appear here.</li>
-        </ol>
+        <Leaderboard :entries="leaderboard" empty-text="Scores will appear here." />
       </div>
 
       <div class="card">
@@ -228,39 +161,12 @@
       </div>
     </template>
 
-    <transition name="dialog">
-      <div
-        v-if="previewImage"
-        class="img-preview-backdrop"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Photo preview"
-        @mousedown.self="previewImage = ''"
-        @keydown.esc.prevent="previewImage = ''"
-        tabindex="-1"
-        ref="previewBackdrop"
-      >
-        <button
-          type="button"
-          class="img-preview-close"
-          aria-label="Close preview"
-          @click="previewImage = ''"
-        >×</button>
-        <img class="img-preview-img" :src="previewImage" alt="" />
-      </div>
-    </transition>
+    <ImagePreviewModal :src="previewImage" @close="previewImage = ''" />
 
     <template v-if="game?.state === 'finished'">
       <div class="card stack">
         <h2>Final standings</h2>
-        <ol class="ladder">
-          <li v-for="(s, i) in leaderboard" :key="s.userId">
-            <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
-            <span class="bold">{{ s.userName }}</span>
-            <span class="pts">{{ s.points }}</span>
-          </li>
-        </ol>
+        <Leaderboard :entries="leaderboard" />
       </div>
     </template>
   </main>
@@ -274,8 +180,13 @@ import { onMessage, wsConnectAdmin, disconnect } from '@/services/ws'
 import { confirm } from '@/services/dialog'
 import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
-import { useModalRef } from '@/composables/useModal'
 import { errMsg } from '@/composables/errMsg'
+import { isoToLocalInput, localInputToIso, formatScheduled } from '@/utils/schedule'
+import { copyToClipboard } from '@/composables/useClipboard'
+import Leaderboard from '@/components/Leaderboard.vue'
+import ImagePreviewModal from '@/components/ImagePreviewModal.vue'
+import QuestionSubmissions from '@/components/admin/QuestionSubmissions.vue'
+import PlayersList from '@/components/admin/PlayersList.vue'
 import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/types'
 
 const props = defineProps<{ code: string }>()
@@ -298,9 +209,6 @@ const deletingQuestion = ref('')
 const copyingUser = ref('')
 const copiedUser = ref('')
 const previewImage = ref('')
-const previewBackdrop = ref<HTMLElement | null>(null)
-const previewOpen = computed(() => !!previewImage.value)
-useModalRef(previewOpen, () => previewBackdrop.value)
 let stopListening: (() => void) | null = null
 const letters = ['A', 'B', 'C', 'D']
 // Server-anchored clock offset (ms). Refreshed on every gameState arrival.
@@ -316,13 +224,11 @@ const playersByPresence = computed(() => {
   return [...on, ...off]
 })
 const showAnsweredMarker = computed(() => game.value?.questionState === 'active' || game.value?.questionState === 'revealed')
+const readyUserIds = computed(() => new Set(questions.value.map(q => q.userId)))
 
 function userName(id: string): string {
   const u = users.value.find(u => u.id === id)
   return u ? u.name : '...'
-}
-function hasQuestion(uid: string): boolean {
-  return questions.value.some(q => q.userId === uid)
 }
 
 async function load() {
@@ -406,32 +312,6 @@ async function saveTimeout() {
   }
 }
 
-// "datetime-local" inputs use the local TZ; converting to/from the ISO string
-// the API speaks needs explicit Date hops so we don't ship UTC strings into
-// the local-time field by mistake.
-function isoToLocalInput(iso?: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-function localInputToIso(v: string): string | null {
-  if (!v) return null
-  const d = new Date(v)
-  if (isNaN(d.getTime())) return null
-  return d.toISOString()
-}
-function formatScheduled(iso?: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 const scheduledDirty = computed(() => {
   return scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt)
 })
@@ -496,20 +376,7 @@ async function copyImpersonateLink(u: User) {
   try {
     const r = await adminApi.impersonate(props.code, u.id)
     const url = `${window.location.origin}/impersonate#token=${encodeURIComponent(r.token)}`
-    let ok = false
-    if (navigator.clipboard && window.isSecureContext) {
-      try { await navigator.clipboard.writeText(url); ok = true } catch {}
-    }
-    if (!ok) {
-      const ta = document.createElement('textarea')
-      ta.value = url
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      try { ok = document.execCommand('copy') } catch {}
-      document.body.removeChild(ta)
-    }
+    const ok = await copyToClipboard(url)
     if (!ok) {
       err.value = 'Could not copy. Link: ' + url
       return
@@ -567,19 +434,6 @@ async function removeQuestion(q: Question) {
 </script>
 
 <style scoped>
-.btn-icon-sm {
-  padding: 0;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
 .state-pill {
   display: inline-block;
   padding: 4px 12px;
@@ -660,55 +514,4 @@ async function removeQuestion(q: Question) {
   color: var(--ink);
 }
 
-.avatar-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.avatar-btn:focus-visible {
-  outline: 3px solid var(--blue);
-  outline-offset: 2px;
-}
-
-.img-preview-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(26, 27, 38, .85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 1100;
-  cursor: zoom-out;
-}
-.img-preview-img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border: var(--bw) solid var(--ink);
-  border-radius: var(--r-lg);
-  background: var(--paper);
-  box-shadow: var(--shadow-3);
-  cursor: default;
-}
-.img-preview-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: var(--bw) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--shadow-1);
-}
-.img-preview-close:hover { background: var(--coral); color: var(--paper); }
 </style>

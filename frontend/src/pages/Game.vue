@@ -137,14 +137,7 @@
 
       <div v-if="qState === 'revealed'" class="card">
         <h2>Leaderboard</h2>
-        <ol class="ladder">
-          <li v-for="(s, i) in leaderboard" :key="s.userId" :class="{ me: s.userId === myId }">
-            <span class="rank">{{ i + 1 }}</span>
-            <img class="avatar" :src="imageUrl(s.photoImageId, 'thumb')" :alt="s.userName" loading="lazy" decoding="async" />
-            <span class="bold">{{ s.userName }}</span>
-            <span class="pts">{{ s.points }}</span>
-          </li>
-        </ol>
+        <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
       </div>
     </template>
   </main>
@@ -158,40 +151,11 @@ import { onMessage, wsSend } from '@/services/ws'
 import { playerApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
+import { useWrongSoundEffect } from '@/composables/useWrongSoundEffect'
+import { pickVerdictLine } from '@/utils/verdict'
+import Leaderboard from '@/components/Leaderboard.vue'
 
-const wrongSoundUrls = Object.values(
-  import.meta.glob<string>('../assets/sounds/wrong/*.mp3', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-  }),
-)
-
-let wrongSoundQueue: string[] = []
-let lastPlayedSound: string | null = null
-
-function refillWrongSoundQueue() {
-  const next = [...wrongSoundUrls]
-  for (let i = next.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[next[i], next[j]] = [next[j], next[i]]
-  }
-  if (next.length > 1 && next[0] === lastPlayedSound) {
-    ;[next[0], next[1]] = [next[1], next[0]]
-  }
-  wrongSoundQueue = next
-}
-
-function playRandomWrongSound() {
-  if (wrongSoundUrls.length === 0) return
-  if (wrongSoundQueue.length === 0) refillWrongSoundQueue()
-  const url = wrongSoundQueue.shift()!
-  lastPlayedSound = url
-  const audio = new Audio(url)
-  audio.play().catch(() => {})
-}
-
-type VerdictKind = 'correct' | 'wrong' | 'none'
+const wrongSound = useWrongSoundEffect()
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -241,45 +205,15 @@ const answersWithUsers = computed(() => {
 
 const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myId.value))
 
-const verdictLines: Record<VerdictKind, Array<{ headline: string; sub: string }>> = {
-  correct: [
-    { headline: 'NAILED IT!', sub: 'Big brain energy detected.' },
-    { headline: 'CORRECT!', sub: 'Frame this moment. Tell your mum.' },
-    { headline: 'BOOM!', sub: 'You absolute trivia gremlin.' },
-    { headline: 'CHEF’S KISS', sub: 'Smooth. Effortless. Annoying.' },
-    { headline: 'TOO EASY', sub: 'Were you peeking? You were peeking.' },
-  ],
-  wrong: [
-    { headline: 'NOPE.', sub: 'Confidently incorrect. Respect.' },
-    { headline: 'OOF.', sub: 'That answer ate gravel.' },
-    { headline: 'SWING AND A MISS', sub: 'Points for vibes only.' },
-    { headline: 'NOT QUITE.', sub: 'Geographically near. Factually no.' },
-    { headline: 'YIKES!', sub: 'Even the dog would’ve guessed better.' },
-  ],
-  none: [
-    { headline: 'GHOSTED.', sub: 'You said nothing. Loudly.' },
-    { headline: 'NO ANSWER?', sub: 'Bold strategy. Zero points.' },
-    { headline: 'AWOL', sub: 'We waited. You vibed elsewhere.' },
-  ],
-}
-
-function pickLine(kind: VerdictKind, seed: string) {
-  const lines = verdictLines[kind]
-  let h = 0
-  const s = String(seed || '')
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  return lines[h % lines.length]
-}
-
 const verdict = computed(() => {
   const seed = (q.value && q.value.id) || ''
   if (!myAnswer.value) {
-    return { kind: 'none' as const, emoji: '👻', ...pickLine('none', seed) }
+    return { kind: 'none' as const, emoji: '👻', ...pickVerdictLine('none', seed) }
   }
   if (myAnswer.value.isCorrect) {
-    return { kind: 'correct' as const, emoji: '🎉', ...pickLine('correct', seed) }
+    return { kind: 'correct' as const, emoji: '🎉', ...pickVerdictLine('correct', seed) }
   }
-  return { kind: 'wrong' as const, emoji: '💥', ...pickLine('wrong', seed) }
+  return { kind: 'wrong' as const, emoji: '💥', ...pickVerdictLine('wrong', seed) }
 })
 
 async function markReady() {
@@ -327,7 +261,7 @@ watch(qState, (newVal) => {
 watch(qState, (newVal) => {
   if (!pageLoaded) return
   if (newVal === 'revealed' && verdict.value.kind === 'wrong') {
-    playRandomWrongSound()
+    wrongSound.play()
   }
 }, { flush: 'post' })
 

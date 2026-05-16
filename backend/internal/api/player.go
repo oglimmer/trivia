@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/oglimmer/trivia/backend/internal/ai"
 	"github.com/oglimmer/trivia/backend/internal/db"
@@ -350,10 +351,14 @@ func (s *Server) aiSuggest(w http.ResponseWriter, r *http.Request) {
 		}
 		img = &ai.Image{MediaType: blob.Mime, Data: blob.Bytes}
 	}
+	start := time.Now()
 	res, err := s.AI.Suggest(r.Context(), ai.SuggestRequest{
 		Hint:       body.Hint,
 		AnswerType: body.AnswerType,
 	}, img)
+	if s.Metrics != nil {
+		s.Metrics.RecordAISuggest(err, time.Since(start))
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

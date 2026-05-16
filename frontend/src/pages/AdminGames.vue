@@ -65,6 +65,7 @@ import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
 import { errMsg } from '@/composables/errMsg'
 import { confirm } from '@/services/dialog'
+import { formatScheduled } from '@/utils/schedule'
 import type { AdminGamesEntry } from '@/types'
 
 const games = ref<AdminGamesEntry[]>([])
@@ -118,14 +119,6 @@ async function create() {
   }
 }
 
-function formatScheduled(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
 
 async function remove(g: AdminGamesEntry) {
   const label = g.name ? `"${g.name}" (${g.code})` : g.code

@@ -11,6 +11,10 @@ import (
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 
+	if s.Metrics != nil {
+		r.Use(s.Metrics.InstrumentHTTP)
+	}
+
 	r.NotFound(s.notFoundHandler)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })

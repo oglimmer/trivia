@@ -48,6 +48,9 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) onWSJoin(c *ws.Client) {
+	if s.Metrics != nil {
+		s.Metrics.WSConnect(string(c.Role))
+	}
 	// On join (initial connect or a wake-time reconnect), push enough state for
 	// the client to fully refresh without an extra HTTP round-trip.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -93,6 +96,9 @@ func (s *Server) onWSJoin(c *ws.Client) {
 }
 
 func (s *Server) onWSLeave(c *ws.Client) {
+	if s.Metrics != nil {
+		s.Metrics.WSDisconnect(string(c.Role))
+	}
 	if c.Role == ws.RolePlayer {
 		if c.UserID != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -164,6 +170,9 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 	ok, pts := game.JudgeAnswer(q.AnswerType, optCount, q.Correct, m.Value, responseMs)
 	if err := s.DB.SaveAnswer(ctx, q.ID, c.UserID, m.Value, responseMs, ok, pts); err != nil {
 		log.Printf("save answer: %v", err)
+	}
+	if s.Metrics != nil {
+		s.Metrics.RecordAnswer(ok)
 	}
 	// Echo personal ack to player; broadcast generic "someone answered" to admin only.
 	c.Send(map[string]any{

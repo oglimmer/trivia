@@ -106,7 +106,7 @@ externalPostgres:
 
 # Ingress configuration. Traefik 3 + cert-manager, matching the
 # oglimmer.com DNS-01 cluster issuer. Path order matters — backend paths
-# (/api, /ws) MUST come BEFORE the frontend catch-all "/".
+# (/api, /ws, /health, /metrics) MUST come BEFORE the frontend catch-all "/".
 #
 # Traefik handles WebSocket upgrades and disables response buffering on its
 # own — no per-Ingress annotation needed for /ws. If the AI-suggest payload
@@ -128,6 +128,9 @@ ingress:
           pathType: Prefix
           backend: api
         - path: /health
+          pathType: Exact
+          backend: api
+        - path: /metrics
           pathType: Exact
           backend: api
         - path: /

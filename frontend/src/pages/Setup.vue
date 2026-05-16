@@ -230,6 +230,7 @@ import { playerApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
+import { useSaveHint } from '@/composables/useSaveHint'
 import type { AnswerType, Question } from '@/types'
 
 const props = defineProps<{ code: string }>()
@@ -255,8 +256,7 @@ const initialReady = ref(false)
 const nowMs = ref(Date.now())
 let clockTimer: ReturnType<typeof setInterval> | null = null
 const saveBtnRef = ref<HTMLButtonElement | null>(null)
-const showSaveHint = ref(false)
-let saveBtnObserver: IntersectionObserver | null = null
+const { visible: showSaveHint, arm: armSaveHint, dismiss: dismissSaveHint, scrollTo: scrollToSave } = useSaveHint(saveBtnRef)
 
 const lockedEmail = ref('')
 const savingEmail = ref(false)
@@ -333,32 +333,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
-  saveBtnObserver?.disconnect()
 })
-
-function armSaveHint() {
-  saveBtnObserver?.disconnect()
-  showSaveHint.value = true
-  nextTick(() => {
-    const el = saveBtnRef.value
-    if (!el || typeof IntersectionObserver === 'undefined') return
-    saveBtnObserver = new IntersectionObserver((entries) => {
-      if (entries.some(e => e.isIntersecting)) {
-        showSaveHint.value = false
-        saveBtnObserver?.disconnect()
-        saveBtnObserver = null
-      }
-    }, { threshold: 0.5 })
-    saveBtnObserver.observe(el)
-  })
-}
-
-function scrollToSave() {
-  showSaveHint.value = false
-  saveBtnObserver?.disconnect()
-  saveBtnObserver = null
-  saveBtnRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
 
 watch(() => store.game && store.game.state, (s) => {
   if (s === 'game') router.replace(`/g/${props.code}/play`)
@@ -420,9 +395,7 @@ async function useAIPath() {
 }
 
 async function save() {
-  showSaveHint.value = false
-  saveBtnObserver?.disconnect()
-  saveBtnObserver = null
+  dismissSaveHint()
   err.value = ''
   loading.value = true
   try {
