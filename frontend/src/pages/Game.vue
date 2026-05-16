@@ -159,6 +159,38 @@ import { playerApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 
+const wrongSoundUrls = Object.values(
+  import.meta.glob<string>('../assets/sounds/wrong/*.mp3', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+)
+
+let wrongSoundQueue: string[] = []
+let lastPlayedSound: string | null = null
+
+function refillWrongSoundQueue() {
+  const next = [...wrongSoundUrls]
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[next[i], next[j]] = [next[j], next[i]]
+  }
+  if (next.length > 1 && next[0] === lastPlayedSound) {
+    ;[next[0], next[1]] = [next[1], next[0]]
+  }
+  wrongSoundQueue = next
+}
+
+function playRandomWrongSound() {
+  if (wrongSoundUrls.length === 0) return
+  if (wrongSoundQueue.length === 0) refillWrongSoundQueue()
+  const url = wrongSoundQueue.shift()!
+  lastPlayedSound = url
+  const audio = new Audio(url)
+  audio.play().catch(() => {})
+}
+
 type VerdictKind = 'correct' | 'wrong' | 'none'
 
 const props = defineProps<{ code: string }>()
@@ -291,6 +323,13 @@ watch(qState, (newVal) => {
   if (!pageLoaded) return
   animateVerdict.value = newVal === 'revealed'
 }, { flush: 'pre' })
+
+watch(qState, (newVal) => {
+  if (!pageLoaded) return
+  if (newVal === 'revealed' && verdict.value.kind === 'wrong') {
+    playRandomWrongSound()
+  }
+}, { flush: 'post' })
 
 watch(() => store.game && store.game.state, (s) => {
   if (s === 'setup') router.replace(`/g/${props.code}/setup`)
