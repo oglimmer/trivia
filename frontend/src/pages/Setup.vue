@@ -420,6 +420,9 @@ async function useAIPath() {
 }
 
 async function save() {
+  showSaveHint.value = false
+  saveBtnObserver?.disconnect()
+  saveBtnObserver = null
   err.value = ''
   loading.value = true
   try {
