@@ -208,7 +208,7 @@ Public:
 - `GET  /api/games/{code}/questions` — questions for the game (`correct` only included once the game is `finished`)
 - `PUT  /api/games/{code}/questions` — submit/update the player's question (`photoImageId` required)
 - `GET  /api/games/{code}/leaderboard`
-- `POST /api/ai/suggest` — `{hint, answerType, photoImageId?}` → `{text, options, correct}`. The backend fetches the `medium` variant of the referenced image and includes it as a vision block in the prompt.
+- `POST /api/ai/suggest` — `{hint, answerType, photoImageId?}` → `{text, options, correct}`. The backend fetches the `medium` variant of the referenced image and includes it as a vision block in the prompt. The call enables Anthropic's `web_search_20260209` tool (capped at 3 searches) so the model can verify facts before committing them, which makes the request fan out to 60–90 s end-to-end — the HTTP client timeout is 120 s.
 
 Image store:
 - `POST /api/images` — multipart `file` (≤ 8 MiB). Server re-encodes to JPEG q=85, generates `thumb` (128 px) and `medium` (640 px) variants, dedupes by sha256, and returns `{id}`.
@@ -272,7 +272,7 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 - **No host-side reorder**: the admin can delete a question in setup, but ordering is still randomized once on transition to `game`.
 - **No "rewind"**: admin can only move forward through questions, can't re-open a revealed one.
 - **PWA basics missing**: no manifest, no service worker, no offline cache. App still works fine in a normal mobile browser.
-- **AI suggestion** returns the model's first JSON block; on rare malformed output the user gets the raw error. Could retry or wrap in a structured-output flow.
+- **AI suggestion** returns the first JSON block found in the last text content block (web search produces interleaved tool-use / tool-result blocks); on rare malformed output the user gets the raw error. Could retry or wrap in a structured-output flow.
 - **Accessibility**: the option buttons have keyboard focus and decent contrast, but there's no formal WCAG pass — screen-reader labels on the iconic buttons (camera, library, ✓, ✕) would help.
 - **The podium reveal in `Results.vue` is one route with phases** rather than three separate URLs. Functionally identical to "different pages" but the back button skips the whole sequence.
 
