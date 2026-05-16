@@ -552,8 +552,12 @@ async function confirmAI() {
   max-width: calc(100vw - 32px);
   animation: save-hint-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.save-hint:active {
-  transform: translate(calc(-50% + 2px), calc(-50% + 2px));
+.save-hint:hover:not(:disabled) {
+  transform: translate(calc(-50% - 1px), calc(-50% - 1px));
+  box-shadow: 7px 7px 0 var(--ink);
+}
+.save-hint:active:not(:disabled) {
+  transform: translate(calc(-50% + 3px), calc(-50% + 3px));
   box-shadow: 3px 3px 0 var(--ink);
 }
 .save-hint__arrow {
