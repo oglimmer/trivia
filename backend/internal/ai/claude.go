@@ -57,7 +57,11 @@ func New() *Client {
 		APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
 		Model:   model,
 		BaseURL: defaultBaseURL,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		// 30s was tight enough when this was a plain one-shot completion. With
+		// web_search_20260209 + dynamic filtering, the request can fan out to
+		// 3 searches plus code-execution filtering plus vision reasoning, and
+		// 60–90s end-to-end is normal. 120s is a comfortable ceiling.
+		HTTP: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -80,16 +84,38 @@ What makes a GOOD trivia question here:
 - For "number", pick facts where the magnitude is itself surprising (counts, years, distances, speeds, weights).
 - For "yesno", lean on counter-intuitive truths where the gut answer is wrong.
 
+Use the web_search tool to verify the fact before committing to it. Specifically:
+- If you are not >95% confident the fact is true AND that the specific value (number, year, name) is correct, search to confirm.
+- For "number" and "choice" questions, search to pin down the exact figure rather than guessing — a question with a wrong "correct" answer is worse than a boring one.
+- Prefer facts you can corroborate from a reputable source in the search results. If search contradicts your initial idea, change the fact rather than the source.
+
 Hard rules:
 - Keep "text" under ~140 chars, a single sentence, no preamble like "Did you know".
 - Never reveal the answer inside the question.
-- If the photo/hint is too vague to anchor a real fact, pick the most specific identifiable thing in it (object, place, species, brand, era) and build trivia around that.`
+- If the photo/hint is too vague to anchor a real fact, pick the most specific identifiable thing in it (object, place, species, brand, era) and build trivia around that.
+- Your FINAL message must be the JSON object alone — no prose around it, no code fences. Any reasoning or search results stay in the tool-use turns.`
 
 type anthropicReq struct {
 	Model     string           `json:"model"`
 	MaxTokens int              `json:"max_tokens"`
 	System    string           `json:"system"`
 	Messages  []map[string]any `json:"messages"`
+	Tools     []map[string]any `json:"tools,omitempty"`
+}
+
+// webSearchTool enables Anthropic's server-side web search so the model can
+// verify obscure facts before committing them to the question. max_uses is a
+// cost ceiling — most prompts need 1–2 searches; 3 leaves headroom without
+// runaway billing ($10 per 1k searches).
+//
+// web_search_20260209 enables dynamic filtering (Claude writes code to
+// post-filter search results before they hit context). The API auto-injects
+// the required code_execution tool server-side; declaring it ourselves causes
+// a 400 "tool names must be unique" error.
+var webSearchTool = map[string]any{
+	"type":     "web_search_20260209",
+	"name":     "web_search",
+	"max_uses": 3,
 }
 
 type anthropicResp struct {
@@ -132,11 +158,12 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest, image *Image) 
 
 	body := anthropicReq{
 		Model:     c.Model,
-		MaxTokens: 512,
+		MaxTokens: 4096,
 		System:    systemPrompt,
 		Messages: []map[string]any{
 			{"role": "user", "content": userBlocks},
 		},
+		Tools: []map[string]any{webSearchTool},
 	}
 	buf, _ := json.Marshal(body)
 
@@ -171,7 +198,20 @@ func (c *Client) Suggest(ctx context.Context, req SuggestRequest, image *Image) 
 	if len(ar.Content) == 0 {
 		return nil, errors.New("empty response")
 	}
-	text := ar.Content[0].Text
+	// With the web_search tool enabled, content can be a mix of text,
+	// server_tool_use, and web_search_tool_result blocks. The JSON answer is
+	// in the last text block — earlier text may be the model narrating its
+	// search plan before the tool fires.
+	text := ""
+	for i := len(ar.Content) - 1; i >= 0; i-- {
+		if ar.Content[i].Type == "text" && strings.ContainsRune(ar.Content[i].Text, '{') {
+			text = ar.Content[i].Text
+			break
+		}
+	}
+	if text == "" {
+		return nil, fmt.Errorf("no text block with JSON in response: %s", string(rb))
+	}
 	// Be permissive: extract first {...} block in case the model wrapped output.
 	start := strings.IndexByte(text, '{')
 	end := strings.LastIndexByte(text, '}')

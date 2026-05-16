@@ -200,7 +200,7 @@
         <div class="modal stack center">
           <div class="spinner" aria-hidden="true"></div>
           <h2 id="ai-busy-title" style="margin: 0;">Cooking up a question…</h2>
-          <p class="muted" style="margin: 0;">Usually takes a few seconds.</p>
+          <p class="muted" style="margin: 10px 0 0 0;">Lowkey just wait 90 seconds, our AI Overlords are working on it.</p>
         </div>
       </div>
     </transition>

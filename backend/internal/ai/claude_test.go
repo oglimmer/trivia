@@ -154,6 +154,60 @@ func TestSuggestUpstreamGarbage(t *testing.T) {
 	}
 }
 
+func TestSuggestRequestEnablesWebSearch(t *testing.T) {
+	var capturedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"content":[{"type":"text","text":"{\"text\":\"q\",\"options\":[],\"correct\":1}"}]}`)
+	}))
+	defer srv.Close()
+
+	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
+	if _, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "number"}, nil); err != nil {
+		t.Fatalf("suggest: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(capturedBody, &got); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	tools, ok := got["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("expected exactly 1 tool in request (web_search only — Anthropic auto-injects code_execution for dynamic filtering, declaring it ourselves causes a 400), got %v", got["tools"])
+	}
+	tool, _ := tools[0].(map[string]any)
+	if tool["type"] != "web_search_20260209" || tool["name"] != "web_search" {
+		t.Errorf("unexpected tool definition: %v", tool)
+	}
+}
+
+func TestSuggestParsesLastTextBlockAfterToolUse(t *testing.T) {
+	// When web search runs, content is a mix of text, server_tool_use, and
+	// web_search_tool_result blocks. The JSON answer is in the *last* text
+	// block — an earlier text block may just be the model thinking aloud.
+	resp := `{"content":[
+		{"type":"text","text":"Let me verify that with a quick search."},
+		{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"bauxite reserves"}},
+		{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]},
+		{"type":"text","text":"{\"text\":\"q?\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":2}"}
+	]}`
+	srv := fakeAnthropic(t, 200, resp)
+	defer srv.Close()
+
+	c := &Client{APIKey: "k", Model: "test", BaseURL: srv.URL, HTTP: srv.Client()}
+	got, err := c.Suggest(context.Background(), SuggestRequest{AnswerType: "choice"}, nil)
+	if err != nil {
+		t.Fatalf("suggest: %v", err)
+	}
+	if got.Text != "q?" {
+		t.Errorf("expected final text block, got %q", got.Text)
+	}
+	idx := int(got.Correct.(float64))
+	if got.Options[idx] != "C" {
+		t.Errorf("correct should still point at \"C\" after shuffle, got options=%v idx=%d", got.Options, idx)
+	}
+}
+
 func TestSuggestSendsImageBlock(t *testing.T) {
 	// When an Image is provided, the user message must include an image block
 	// with base64-encoded data of the right media type.
