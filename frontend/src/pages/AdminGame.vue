@@ -78,42 +78,15 @@
 
     <!-- GAME MODE -->
     <template v-if="game?.state === 'game'">
-      <div class="card stack">
-        <div class="row between">
-          <h2 style="margin: 0;">Now playing</h2>
-          <span class="timer tag tag--pink" v-if="game?.questionState === 'active'">{{ remaining }}s</span>
-          <span class="tag tag--mint" v-else-if="game?.questionState === 'revealed'">Revealed</span>
-        </div>
-
-        <div v-if="currentQ" class="stack">
-          <div class="photo-frame">
-            <img :src="imageUrl(currentQ.photoImageId, 'medium')" alt="" loading="lazy" decoding="async" />
-            <div class="q-author">by {{ userName(currentQ.userId) }}</div>
-          </div>
-          <div class="q-card__text">{{ currentQ.text }}</div>
-
-          <div v-if="currentQ.answerType === 'choice'" class="stack">
-            <div
-              v-for="(o, i) in currentQ.options"
-              :key="i"
-              :class="['option-btn', i === Number(currentQ.correct) && 'correct']"
-            >
-              <span class="option-btn__bullet">{{ letters[i] }}</span>{{ o }}
-            </div>
-          </div>
-          <div v-else class="card card--mint center" style="padding: 14px;">
-            <span class="muted bold" style="font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;">Correct</span>
-            <div style="font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: 1.6rem; margin-top: 4px;">{{ currentQ.correct }}</div>
-          </div>
-        </div>
-        <div v-else class="muted center">No active question.</div>
-
-        <div class="row wrap">
-          <button class="btn-primary btn-lg" v-if="!currentQ" @click="activateNext">▶ Start first question</button>
-          <button class="btn-warn btn-lg" v-if="game?.questionState === 'active'" @click="reveal">Reveal answer</button>
-          <button class="btn-primary btn-lg" v-if="game?.questionState === 'revealed'" @click="next">Next question →</button>
-        </div>
-      </div>
+      <LiveQuestion
+        :question="currentQ"
+        :question-state="game?.questionState"
+        :remaining="remaining"
+        :author-name="currentQ ? userName(currentQ.userId) : ''"
+        @activate-next="activateNext"
+        @reveal="reveal"
+        @next="next"
+      />
 
       <div v-if="game?.questionState !== 'idle' && playerAnswered.size" class="card card--cream">
         <div class="row between" style="margin-bottom: 12px;">
@@ -187,6 +160,7 @@ import Leaderboard from '@/components/Leaderboard.vue'
 import ImagePreviewModal from '@/components/ImagePreviewModal.vue'
 import QuestionSubmissions from '@/components/admin/QuestionSubmissions.vue'
 import PlayersList from '@/components/admin/PlayersList.vue'
+import LiveQuestion from '@/components/admin/LiveQuestion.vue'
 import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/types'
 
 const props = defineProps<{ code: string }>()
@@ -210,7 +184,6 @@ const copyingUser = ref('')
 const copiedUser = ref('')
 const previewImage = ref('')
 let stopListening: (() => void) | null = null
-const letters = ['A', 'B', 'C', 'D']
 // Server-anchored clock offset (ms). Refreshed on every gameState arrival.
 const serverClockOffsetMs = ref(0)
 

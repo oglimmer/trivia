@@ -52,8 +52,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import { imageUrl } from '@/services/images'
+import { generateRandomAvatarBlob } from '@/utils/randomAvatar'
 
 const props = withDefaults(defineProps<{
   imageId?: string
@@ -157,81 +158,12 @@ async function uploadImage(blob: Blob): Promise<string> {
   return j.id
 }
 
-// --- Random avatar generator ---
-const RANDOM_EMOJIS = [
-  '🦊','🐼','🐙','🦄','🐸','🦖','🐵','🐯','🦁','🐨','🦝','🐺','🐱','🐶','🐰',
-  '🐮','🐷','🐭','🐹','🐻','🐗','🦔','🐢','🐧','🦆','🦉','🦅','🦦','🦥','🐝',
-  '🦋','🐞','🦑','🐠','🐡','🦀','🐬','🐳','🦈','🐲','🦕',
-  '🍕','🌮','🍔','🍩','🍪','🧁','🍰','🍦','🍓','🍉','🥑','🍍','🍑','🍒','🍙','🍣',
-  '🌈','⭐','🌟','✨','🎈','🎉','🎲','🎯','🎮','🎸','🎺','🪐','🌙','🔥','⚡',
-  '🌊','🌸','🌺','🌻','🍄','🎨','🎭','🎃','🪄','🍭','🌵',
-]
-
-const RANDOM_BGS = [
-  '#FFD8E5', '#FFF1B3', '#D9E7FF', '#CFF1EE', '#FBEFD0', '#FFB39C',
-  '#FF4D8D', '#FFD23F', '#3A86FF', '#4ECDC4', '#FF6B6B',
-]
-
-const lastEmojiIdx = ref(-1)
-const lastBgIdx = ref(-1)
-
-function rollIdx(maxLen: number, lastRef: Ref<number>): number {
-  let i: number
-  do { i = Math.floor(Math.random() * maxLen) } while (maxLen > 1 && i === lastRef.value)
-  lastRef.value = i
-  return i
-}
-
 async function generateRandom() {
   if (busy.value) return
   err.value = ''
-  const size = 512
-  const cvs = document.createElement('canvas')
-  cvs.width = size
-  cvs.height = size
-  const ctx = cvs.getContext('2d')
-  if (!ctx) { err.value = 'Canvas unsupported'; return }
-
-  const bg = RANDOM_BGS[rollIdx(RANDOM_BGS.length, lastBgIdx)]
-  ctx.fillStyle = bg
-  ctx.fillRect(0, 0, size, size)
-
-  const pat = Math.random()
-  if (pat < 0.33) {
-    ctx.strokeStyle = 'rgba(26, 27, 38, 0.09)'
-    ctx.lineWidth = size * 0.05
-    ctx.beginPath()
-    for (let i = -size; i < size * 2; i += size * 0.18) {
-      ctx.moveTo(i, 0)
-      ctx.lineTo(i + size, size)
-    }
-    ctx.stroke()
-  } else if (pat < 0.66) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
-    const step = size * 0.18
-    for (let x = step / 2; x < size; x += step) {
-      for (let y = step / 2; y < size; y += step) {
-        ctx.beginPath()
-        ctx.arc(x, y, size * 0.025, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-  }
-
-  const emoji = RANDOM_EMOJIS[rollIdx(RANDOM_EMOJIS.length, lastEmojiIdx)]
-  ctx.font = `${Math.round(size * 0.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(emoji, size / 2, size / 2 + size * 0.04)
-
   setBusy(true)
   try {
-    const blob: Blob = await new Promise((resolve, reject) => {
-      cvs.toBlob(
-        (b) => b ? resolve(b) : reject(new Error('Could not generate avatar')),
-        'image/png',
-      )
-    })
+    const blob = await generateRandomAvatarBlob()
     const id = await uploadImage(blob)
     isRandom.value = true
     emit('update:imageId', id)

@@ -10,34 +10,7 @@
         <h1>Locked in!</h1>
         <p>Your question is ready. Sit tight — the host kicks things off in a moment.</p>
 
-        <div v-if="offerEmail" class="email-offer stack">
-          <p class="email-offer__lead">
-            <strong>Got a minute?</strong> The game won't start for a while. Drop us your email
-            and we'll send a one-click link so you can rejoin from any device.
-          </p>
-          <label for="locked-email" class="sr-only">Email</label>
-          <div class="row" style="gap: 8px;">
-            <input
-              id="locked-email"
-              v-model="lockedEmail"
-              type="email"
-              placeholder="you@example.com"
-              maxlength="120"
-              autocomplete="email"
-              inputmode="email"
-              style="flex: 1;"
-            />
-            <button
-              class="btn-primary"
-              :disabled="!lockedEmailValid || savingEmail"
-              @click="saveLockedEmail"
-            >
-              {{ savingEmail ? '…' : 'Send link' }}
-            </button>
-          </div>
-          <div v-if="emailErr" class="error">{{ emailErr }}</div>
-          <div v-if="emailSent" class="email-offer__sent">Link sent! Check your inbox.</div>
-        </div>
+        <EmailCapture v-if="offerEmail" />
 
         <button class="btn-ghost" @click="startEdit">← Edit my question</button>
       </div>
@@ -226,6 +199,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import Stepper from '@/components/Stepper.vue'
+import EmailCapture from '@/components/EmailCapture.vue'
 import { playerApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
@@ -258,11 +232,6 @@ let clockTimer: ReturnType<typeof setInterval> | null = null
 const saveBtnRef = ref<HTMLButtonElement | null>(null)
 const { visible: showSaveHint, arm: armSaveHint, dismiss: dismissSaveHint, scrollTo: scrollToSave } = useSaveHint(saveBtnRef)
 
-const lockedEmail = ref('')
-const savingEmail = ref(false)
-const emailSent = ref(false)
-const emailErr = ref('')
-
 const users = computed(() => store.users)
 
 const WAIT_NOTICE_THRESHOLD_MS = 60 * 60 * 1000
@@ -282,8 +251,7 @@ const showWaitNotice = withinThreshold
 
 // Email pitch only makes sense outside the threshold (player is going to walk
 // away) and only if they haven't already given one.
-const offerEmail = computed(() => !withinThreshold.value && !(store.me?.email || '').trim() && !emailSent.value)
-const lockedEmailValid = computed(() => /.+@.+\..+/.test(lockedEmail.value.trim()))
+const offerEmail = computed(() => !withinThreshold.value && !(store.me?.email || '').trim())
 
 const hasContent = computed(() => {
   if (text.value.trim()) return true
@@ -425,25 +393,6 @@ async function save() {
   }
 }
 
-async function saveLockedEmail() {
-  emailErr.value = ''
-  savingEmail.value = true
-  try {
-    const trimmed = lockedEmail.value.trim()
-    await playerApi.updateMe({
-      name: store.me?.name || '',
-      photoImageId: store.me?.photoImageId || '',
-      email: trimmed,
-    })
-    store.updateMe({ email: trimmed })
-    emailSent.value = true
-  } catch (e) {
-    emailErr.value = errMsg(e, 'Could not save email')
-  } finally {
-    savingEmail.value = false
-  }
-}
-
 function requestAI() {
   if (hasContent.value) { aiConfirm.value = true; return }
   confirmAI()
@@ -486,24 +435,6 @@ async function confirmAI() {
   line-height: 1.35;
 }
 
-.email-offer {
-  margin-top: 8px;
-  padding: 14px;
-  background: var(--paper, #fff);
-  border: var(--bw) solid var(--ink);
-  border-radius: var(--r-sm);
-  box-shadow: 3px 3px 0 var(--ink);
-  text-align: left;
-  width: 100%;
-}
-.email-offer__lead {
-  margin: 0 0 8px;
-  line-height: 1.35;
-}
-.email-offer__sent {
-  font-weight: 800;
-  color: var(--ink);
-}
 .save-hint {
   position: fixed;
   left: 50%;
@@ -553,16 +484,5 @@ async function confirmAI() {
 @media (prefers-reduced-motion: reduce) {
   .save-hint__arrow,
   .save-hint { animation: none; }
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>
