@@ -302,6 +302,14 @@ func (s *Server) leaderboard(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		return
 	}
+	// Mid-question scores would let a player who has already answered deduce
+	// whether they got it right (their points/correct count would tick up)
+	// before the admin reveals. Only expose scores once the current question
+	// is revealed or the game is finished — same gating as the WS envelope.
+	if g.State != "finished" && g.QuestionState != "revealed" {
+		writeJSON(w, 200, []db.Score{})
+		return
+	}
 	sc, err := s.DB.Leaderboard(r.Context(), g.ID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

@@ -382,6 +382,9 @@ func TestLeaderboardSurfacesPhotoImageID(t *testing.T) {
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	imgID := "img-le"
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", &imgID, "", "tok-a")
+	// Leaderboard is gated until the game is finished or a question is
+	// revealed, so flip the game into a state where scores are exposed.
+	_ = f.SetGameState(context.TODO(), g.ID, "finished")
 
 	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/leaderboard"})
 	if w.Code != http.StatusOK {
@@ -393,6 +396,33 @@ func TestLeaderboardSurfacesPhotoImageID(t *testing.T) {
 	}
 	if scores[0].PhotoImageID == nil || *scores[0].PhotoImageID != imgID {
 		t.Errorf("photoImageId missing from leaderboard: %+v", scores[0].PhotoImageID)
+	}
+}
+
+// TestLeaderboardHiddenUntilRevealed guards against the score-deduction leak:
+// during an active (unrevealed) question a player who has answered must not be
+// able to read points/correct from the public leaderboard endpoint and infer
+// whether their answer was right.
+func TestLeaderboardHiddenUntilRevealed(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
+
+	// In-setup: must be empty.
+	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/leaderboard"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("setup: want 200, got %d", w.Code)
+	}
+	if got := decode[[]db.Score](t, w); len(got) != 0 {
+		t.Errorf("setup: want empty leaderboard, got %+v", got)
+	}
+
+	// Active question: still must be empty (this is the leak that previously
+	// existed — points/correct would tick up immediately on SaveAnswer).
+	_ = f.SetGameState(context.TODO(), g.ID, "game")
+	w = do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/leaderboard"})
+	if got := decode[[]db.Score](t, w); len(got) != 0 {
+		t.Errorf("active: want empty leaderboard, got %+v", got)
 	}
 }
 
