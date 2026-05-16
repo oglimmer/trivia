@@ -13,10 +13,22 @@ import Imprint from './pages/Imprint.vue'
 import Privacy from './pages/Privacy.vue'
 import Terms from './pages/Terms.vue'
 import Developers from './pages/Developers.vue'
+import ShowcaseHub from './pages/showcase/Hub.vue'
+import ShowcaseAuth from './pages/showcase/Auth.vue'
+import ShowcaseImages from './pages/showcase/Images.vue'
+import ShowcaseDatabase from './pages/showcase/Database.vue'
+import ShowcaseWebSocket from './pages/showcase/WebSocket.vue'
+import ShowcaseScoring from './pages/showcase/Scoring.vue'
+import ShowcaseAI from './pages/showcase/AI.vue'
+import ShowcaseDeployment from './pages/showcase/Deployment.vue'
 import NotFound from './pages/NotFound.vue'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0 }
+  },
   routes: [
     { path: '/', component: Landing },
     { path: '/g/:code/join', component: Join, props: true },
@@ -32,6 +44,14 @@ const router = createRouter({
     { path: '/privacy', component: Privacy },
     { path: '/terms', component: Terms },
     { path: '/developers', component: Developers },
+    { path: '/developers-showcase', component: ShowcaseHub },
+    { path: '/developers-showcase/auth', component: ShowcaseAuth },
+    { path: '/developers-showcase/images', component: ShowcaseImages },
+    { path: '/developers-showcase/database', component: ShowcaseDatabase },
+    { path: '/developers-showcase/websocket', component: ShowcaseWebSocket },
+    { path: '/developers-showcase/scoring', component: ShowcaseScoring },
+    { path: '/developers-showcase/ai', component: ShowcaseAI },
+    { path: '/developers-showcase/deployment', component: ShowcaseDeployment },
     { path: '/:pathMatch(.*)*', component: NotFound },
   ],
 })

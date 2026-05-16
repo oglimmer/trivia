@@ -104,21 +104,20 @@ externalPostgres:
   user: trivia
   database: trivia
 
-# Ingress configuration. Cert-manager + ingress-nginx pattern, matching the
+# Ingress configuration. Traefik 3 + cert-manager, matching the
 # oglimmer.com DNS-01 cluster issuer. Path order matters — backend paths
 # (/api, /ws) MUST come BEFORE the frontend catch-all "/".
+#
+# Traefik handles WebSocket upgrades and disables response buffering on its
+# own — no per-Ingress annotation needed for /ws. If the AI-suggest payload
+# needs a bigger body cap than the Traefik entrypoint default, raise it on the
+# Traefik install itself (transport.respondingTimeouts, maxBodySize).
 ingress:
   enabled: true
+  # Set to "traefik" if Traefik isn't the cluster's default IngressClass.
   className: ""
   annotations:
     cert-manager.io/cluster-issuer: "oglimmer-com-dns"
-    # WebSockets: ingress-nginx upgrades automatically when the client sends
-    # Upgrade headers, but keep the long-lived stream alive and don't buffer.
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    # AI suggest can post moderately sized payloads; keep room.
-    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
   hosts:
     - host: trivia.oglimmer.com
       paths:

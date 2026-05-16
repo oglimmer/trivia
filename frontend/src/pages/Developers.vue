@@ -7,6 +7,11 @@
       <span class="hero__eyebrow">Reference</span>
       <h1 class="hero__title">Developers /<br /><em>API docs</em></h1>
       <p class="hero__subtitle">The HTTP and WebSocket surface that powers Trivia.</p>
+      <p class="hero__subtitle" style="margin-top: 8px;">
+        Looking for <em>how things actually work</em> instead of an endpoint
+        list? See the
+        <RouterLink to="/developers-showcase">implementation showcase</RouterLink>.
+      </p>
     </section>
 
     <!-- ---------- Overview ---------- -->
@@ -595,6 +600,8 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
 
     <nav class="legal-nav">
       <RouterLink to="/" class="btn-link">← Back to home</RouterLink>
+      <span aria-hidden="true">·</span>
+      <RouterLink to="/developers-showcase" class="btn-link">Implementation showcase</RouterLink>
       <span aria-hidden="true">·</span>
       <a class="btn-link" href="https://github.com/oglimmer/trivia" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
     </nav>

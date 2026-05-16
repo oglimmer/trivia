@@ -1,7 +1,7 @@
 # trivia Helm chart
 
 Self-hosted realtime trivia game: Vue SPA + Go backend + Postgres, fronted by
-ingress-nginx with cert-manager-issued TLS.
+Traefik 3 with cert-manager-issued TLS.
 
 ## What ships
 
@@ -38,9 +38,9 @@ ClusterIssuer (DNS-01 challenge against the `oglimmer.com` zone). The TLS
 secret is `tls-trivia-ingress-dns`. Change `ingress.annotations.cert-manager.io/cluster-issuer`
 and `ingress.tls[].secretName` to use a different issuer.
 
-WebSocket upgrades work out-of-the-box with ingress-nginx; the annotations
-disable response buffering and bump the read/send timeouts so the `/ws`
-stream stays alive.
+WebSocket upgrades work out-of-the-box with Traefik 3 — the controller
+forwards `Upgrade: websocket` and keeps the stream alive for as long as the
+backend does. No per-Ingress annotations are needed for the `/ws` path.
 
 ## Registry auth
 

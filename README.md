@@ -157,7 +157,7 @@ The `oglimmer.sh` helper at the repo root wraps the common loops: `./oglimmer.sh
 
 ## Kubernetes (Helm)
 
-The `helm/trivia` chart deploys backend + frontend + (optional) bundled Postgres behind ingress-nginx with cert-manager-issued TLS. WebSockets ride the same origin over `/ws`; the chart's ingress annotations disable response buffering and bump the read/send timeouts so streams stay alive.
+The `helm/trivia` chart deploys backend + frontend + (optional) bundled Postgres behind Traefik 3 with cert-manager-issued TLS. WebSockets ride the same origin over `/ws`; Traefik handles the `Upgrade` handshake transparently, no per-Ingress annotations required.
 
 ```bash
 # 1. Seal the cluster secrets (one-time, against your kubeseal controller).
