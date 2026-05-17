@@ -46,6 +46,7 @@
             │ path = /api      │ path = /         │
             │ path = /ws       │   (catch-all)    │
             │ path = /health   │                  │
+            │ path = /metrics  │                  │
             ▼                                      ▼
        ┌────────┐                            ┌────────┐
        │  api   │ ◄── env from SealedSecret  │  web   │   (nginx + Vue build)
@@ -58,7 +59,7 @@
        └────────────┘</pre>
       <p>
         Ingress path order matters: backend prefixes
-        (<code>/api</code>, <code>/ws</code>, <code>/health</code>) come
+        (<code>/api</code>, <code>/ws</code>, <code>/health</code>, <code>/metrics</code>) come
         <em>before</em> the frontend catch-all so they don't get swallowed by
         the SPA bundle.
       </p>
@@ -198,6 +199,81 @@ securityContext:
         but logs to stdout — the flag is left as <code>false</code> so an
         operator can drop a debug file if they ever need to. Same posture on
         the nginx container (<code>frontendSecurityContext</code>).
+      </p>
+    </section>
+
+    <section class="card stack legal-prose api-prose">
+      <h2>Observability</h2>
+      <p>
+        The backend exposes Prometheus metrics on a separate
+        <code>/metrics</code> route mounted on the root mux — outside the chi
+        router, the CORS middleware, and the request log — so scrapes don't
+        appear in access logs and the endpoint isn't browser-CORS-exposed.
+        It's guarded by a bearer token: requests without
+        <code>Authorization: Bearer $METRICS_TOKEN</code> get
+        <code>401</code>, and an unset token disables the endpoint entirely
+        with a <code>404</code> (fail-closed beats accidentally shipping it
+        open).
+      </p>
+      <pre class="api-code">curl -sH "Authorization: Bearer $METRICS_TOKEN" \
+  https://trivia.example.com/metrics</pre>
+      <p>
+        Alongside the standard Go runtime + process collectors, the registry
+        carries a set of app-specific series under the
+        <code>trivia_</code> namespace:
+      </p>
+      <ul>
+        <li>
+          <strong>HTTP</strong> — <code>trivia_http_requests_total</code>,
+          <code>trivia_http_request_duration_seconds</code>,
+          <code>trivia_http_in_flight_requests</code>. Path is the chi route
+          pattern (<code>/api/games/&#123;code&#125;</code>), not the raw URL,
+          so game codes and image UUIDs don't blow up label cardinality.
+        </li>
+        <li>
+          <strong>WebSocket</strong> — <code>trivia_ws_connections</code>
+          gauge labelled by role, incremented in the hub's
+          <code>OnJoin</code>/<code>OnLeave</code> callbacks.
+        </li>
+        <li>
+          <strong>Game lifecycle</strong> —
+          <code>trivia_game_count</code> by state,
+          <code>trivia_game_online_players</code>, plus counters for answers
+          (by <code>result</code>), question activations, reveals, and
+          auto-closes.
+        </li>
+        <li>
+          <strong>AI &amp; images</strong> —
+          <code>trivia_ai_suggest_requests_total</code> +
+          <code>_duration_seconds</code>,
+          <code>trivia_images_uploaded_total</code>,
+          <code>trivia_images_orphans_deleted_total</code>.
+        </li>
+        <li>
+          <code>trivia_build_info</code> — value always <code>1</code>;
+          labels carry version, commit, build time, and Go version, so a
+          single query identifies the deployed binary and a rise in
+          <code>changes()</code> annotates redeploys.
+        </li>
+      </ul>
+      <p>
+        Live gauges that depend on state the metrics package can't see
+        (online players, games by state) are pulled on every scrape via
+        caller-supplied closures — so the <code>metrics</code> package
+        stays free of <code>db</code> and <code>ws</code> dependencies.
+        The Ingress exposes <code>/metrics</code> on the same host as
+        <code>/api</code>; the Helm chart wires
+        <code>METRICS_TOKEN</code> from the sealed secret as an optional
+        key, so a deployment that never sets it simply leaves the endpoint
+        disabled.
+      </p>
+      <p>
+        One trap worth flagging: the HTTP middleware wraps the
+        <code>ResponseWriter</code> to capture status codes for the request
+        counter, so it has to forward <code>http.Hijacker</code> (and
+        <code>http.Flusher</code>) to the underlying writer — otherwise the
+        gorilla WebSocket upgrade fails with "response does not implement
+        http.Hijacker" and every <code>/ws</code> call 500s.
       </p>
     </section>
 
