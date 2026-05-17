@@ -62,13 +62,17 @@ func (s *Server) onWSJoin(c *ws.Client) {
 	}
 	g, err := s.DB.GameByID(ctx, c.GameID)
 	if err != nil {
+		log.Printf("ws join game lookup for %s: %v", c.GameID, err)
 		return
 	}
 	// If a player has already answered the currently-active question, replay an
 	// answerAck before gameState so a page reload mid-question lands on the
 	// "Locked in!" view instead of the answer buttons.
 	if c.Role == ws.RolePlayer && g.QuestionState == "active" && g.CurrentQuestionID != nil {
-		if ans, err := s.DB.AnswersForQuestion(ctx, *g.CurrentQuestionID); err == nil {
+		ans, err := s.DB.AnswersForQuestion(ctx, *g.CurrentQuestionID)
+		if err != nil {
+			log.Printf("ws join answers for question %s: %v", *g.CurrentQuestionID, err)
+		} else {
 			for _, a := range ans {
 				if a.UserID == c.UserID {
 					c.Send(map[string]any{
@@ -81,12 +85,18 @@ func (s *Server) onWSJoin(c *ws.Client) {
 		}
 	}
 	c.Send(s.gameStateEnvelope(ctx, g, c.Role == ws.RoleAdmin))
-	if users, err := s.DB.ListUsers(ctx, c.GameID); err == nil {
+	users, err := s.DB.ListUsers(ctx, c.GameID)
+	if err != nil {
+		log.Printf("ws join list users for %s: %v", c.GameID, err)
+	} else {
 		c.Send(map[string]any{"type": "users", "data": users})
 	}
 	switch c.Role {
 	case ws.RoleAdmin:
-		if qs, err := s.DB.ListQuestions(ctx, c.GameID, true); err == nil {
+		qs, err := s.DB.ListQuestions(ctx, c.GameID, true)
+		if err != nil {
+			log.Printf("ws join list questions for %s: %v", c.GameID, err)
+		} else {
 			c.Send(map[string]any{"type": "questionsAdmin", "data": qs})
 		}
 		c.Send(s.presenceEnvelope(c.GameID))
@@ -147,6 +157,7 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 
 	g, err := s.DB.GameByID(ctx, c.GameID)
 	if err != nil {
+		log.Printf("ws answer game lookup for %s: %v", c.GameID, err)
 		return
 	}
 	if g.QuestionState != "active" || g.CurrentQuestionID == nil || *g.CurrentQuestionID != m.QuestionID {
@@ -154,6 +165,7 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 	}
 	q, err := s.DB.QuestionByID(ctx, m.QuestionID)
 	if err != nil {
+		log.Printf("ws answer question lookup for %s: %v", m.QuestionID, err)
 		return
 	}
 	// Compute response time from question_started_at.

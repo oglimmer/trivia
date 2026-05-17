@@ -65,7 +65,7 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, nameTakenMessage)
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	if b.Email != "" {
@@ -100,7 +100,10 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-	g, _ := s.DB.GameByID(r.Context(), u.GameID)
+	g, err := s.DB.GameByID(r.Context(), u.GameID)
+	if err != nil {
+		log.Printf("me game lookup for %s: %v", u.GameID, err)
+	}
 	writeJSON(w, 200, map[string]any{
 		"user": u,
 		"game": g,
@@ -140,7 +143,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, nameTakenMessage)
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	// Send the magic link only when the email is freshly set or changed —
@@ -148,11 +151,15 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 	if b.Email != "" && b.Email != prevEmail {
 		g, gerr := s.DB.GameByID(r.Context(), u.GameID)
 		gameName, gameCode := "", ""
-		if gerr == nil && g != nil {
+		if gerr != nil {
+			log.Printf("updateMe game lookup for %s: %v", u.GameID, gerr)
+		} else if g != nil {
 			gameName, gameCode = g.Name, g.Code
 		}
 		tok, terr := s.DB.UserTokenByID(r.Context(), u.ID)
-		if terr == nil {
+		if terr != nil {
+			log.Printf("updateMe token lookup for %s: %v", u.ID, terr)
+		} else {
 			s.sendLoginLink(b.Email, b.Name, gameName, gameCode, tok)
 		}
 	}
@@ -167,7 +174,7 @@ func (s *Server) listUsersPublic(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := s.DB.ListUsers(r.Context(), g.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, users)
@@ -182,7 +189,7 @@ func (s *Server) listQuestionsPublic(w http.ResponseWriter, r *http.Request) {
 	includeCorrect := g.State == "finished"
 	qs, err := s.DB.ListQuestions(r.Context(), g.ID, includeCorrect)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, qs)
@@ -234,7 +241,7 @@ func (s *Server) putQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	q, err := s.DB.UpsertQuestion(r.Context(), g.ID, u.ID, b.Text, imgID, b.AnswerType, b.Options, b.Correct)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	s.broadcastQuestionsAdmin(r.Context(), g.ID)
@@ -313,7 +320,7 @@ func (s *Server) leaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 	sc, err := s.DB.Leaderboard(r.Context(), g.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, sc)
@@ -346,7 +353,7 @@ func (s *Server) aiSuggest(w http.ResponseWriter, r *http.Request) {
 				writeErr(w, http.StatusBadRequest, "photoImageId not found")
 				return
 			}
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 		img = &ai.Image{MediaType: blob.Mime, Data: blob.Bytes}

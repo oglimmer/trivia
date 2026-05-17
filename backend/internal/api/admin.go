@@ -34,7 +34,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, err := auth.Issue("admin", "admin", 24*time.Hour)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]string{"token": tok})
@@ -52,7 +52,7 @@ type createGameBody struct {
 func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 	gs, err := s.DB.ListGames(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	counts := s.Hub.OnlinePlayerCounts()
@@ -79,7 +79,7 @@ func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listAllUsers(w http.ResponseWriter, r *http.Request) {
 	us, err := s.DB.ListAllUsers(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, us)
@@ -108,8 +108,14 @@ func (s *Server) adminGame(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		return
 	}
-	users, _ := s.DB.ListUsers(r.Context(), g.ID)
-	qs, _ := s.DB.ListQuestions(r.Context(), g.ID, true)
+	users, err := s.DB.ListUsers(r.Context(), g.ID)
+	if err != nil {
+		log.Printf("adminGame list users for %s: %v", g.ID, err)
+	}
+	qs, err := s.DB.ListQuestions(r.Context(), g.ID, true)
+	if err != nil {
+		log.Printf("adminGame list questions for %s: %v", g.ID, err)
+	}
 	writeJSON(w, 200, map[string]any{
 		"game":      g,
 		"users":     users,
@@ -126,7 +132,7 @@ func (s *Server) deleteGame(w http.ResponseWriter, r *http.Request) {
 	s.Hub.Broadcast(g.ID, map[string]any{"type": "gameDeleted"})
 	s.cancelAutoClose(g.ID)
 	if err := s.DB.DeleteGame(r.Context(), g.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	s.dropGameLock(g.ID)
@@ -153,7 +159,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.DB.DeleteUser(r.Context(), userID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	s.broadcastUsers(r.Context(), g.ID)
@@ -177,7 +183,7 @@ func (s *Server) impersonateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, err := s.DB.UserTokenByID(r.Context(), userID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{
@@ -203,7 +209,7 @@ func (s *Server) deleteQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.DB.DeleteQuestion(r.Context(), qID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	s.broadcastQuestionsAdmin(r.Context(), g.ID)
@@ -234,22 +240,22 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 		cutoff := time.Now().Add(-staleUserThreshold)
 		removed, err := s.DB.DeleteStaleUsers(r.Context(), g.ID, cutoff)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 		prunedUsers = len(removed) > 0
 		// Shuffle question order before entering game mode.
 		if err := s.DB.RandomizeQuestionOrder(r.Context(), g.ID); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 		if err := s.DB.ClearCurrentQuestion(r.Context(), g.ID); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 	}
 	if err := s.DB.SetGameState(r.Context(), g.ID, b.State); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	// No active question survives a state transition.
@@ -286,7 +292,7 @@ func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.QuestionTimeoutSeconds != nil {
 		if err := s.DB.SetQuestionTimeout(r.Context(), g.ID, clampTimeout(*b.QuestionTimeoutSeconds)); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 	}
@@ -302,7 +308,7 @@ func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
 			sched = &t
 		}
 		if err := s.DB.SetGameScheduledAt(r.Context(), g.ID, sched); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 	}
@@ -330,7 +336,11 @@ func (s *Server) activateQuestion(w http.ResponseWriter, r *http.Request) {
 	// If no question id provided, pick the next in sort order.
 	qID := b.QuestionID
 	if qID == "" {
-		qs, _ := s.DB.ListQuestions(r.Context(), g.ID, false)
+		qs, err := s.DB.ListQuestions(r.Context(), g.ID, false)
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
 		next := pickNext(qs, g.CurrentQuestionID)
 		if next == nil {
 			writeErr(w, http.StatusBadRequest, "no more questions")
@@ -339,7 +349,7 @@ func (s *Server) activateQuestion(w http.ResponseWriter, r *http.Request) {
 		qID = next.ID
 	}
 	if err := s.DB.ActivateQuestion(r.Context(), g.ID, qID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	if s.Metrics != nil {
@@ -369,7 +379,7 @@ func (s *Server) revealQuestion(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.DB.CloseQuestion(r.Context(), g.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	if s.Metrics != nil {
@@ -385,11 +395,15 @@ func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		return
 	}
-	qs, _ := s.DB.ListQuestions(r.Context(), g.ID, false)
+	qs, err := s.DB.ListQuestions(r.Context(), g.ID, false)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
 	next := pickNext(qs, g.CurrentQuestionID)
 	if next == nil {
 		if err := s.DB.SetGameState(r.Context(), g.ID, "finished"); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 			return
 		}
 		s.cancelAutoClose(g.ID)
@@ -398,7 +412,7 @@ func (s *Server) nextQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.DB.ActivateQuestion(r.Context(), g.ID, next.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	if s.Metrics != nil {
@@ -419,7 +433,7 @@ func (s *Server) finishGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.DB.SetGameState(r.Context(), g.ID, "finished"); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		serverError(w, r, err)
 		return
 	}
 	s.cancelAutoClose(g.ID)

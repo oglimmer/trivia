@@ -34,6 +34,15 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// serverError logs the underlying error against the request and returns a 500
+// to the client. Use this instead of writeErr(w, 500, err.Error()) so that
+// server-side problems always leave a trace in the logs, not just in the
+// client's response body.
+func serverError(w http.ResponseWriter, r *http.Request, err error) {
+	log.Printf("%s %s: %v", r.Method, r.URL.Path, err)
+	writeErr(w, http.StatusInternalServerError, err.Error())
+}
+
 func randomToken(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
@@ -93,7 +102,7 @@ func (s *Server) loadGameByCode(w http.ResponseWriter, r *http.Request) *db.Game
 		if errors.Is(err, db.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "no game")
 		} else {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			serverError(w, r, err)
 		}
 		return nil
 	}
