@@ -82,10 +82,12 @@ func main() {
 	})
 
 	root := http.NewServeMux()
-	// /metrics is mounted at the root mux, outside the CORS and request-log
-	// wrappers, so scrapes don't pollute access logs and the endpoint isn't
-	// CORS-exposed to browsers. Token check happens inside the handler.
+	// /metrics and /health are mounted at the root mux, outside the CORS and
+	// request-log wrappers, so scrapes/probes don't pollute access logs and
+	// /metrics isn't CORS-exposed to browsers. /metrics checks its token inside
+	// the handler.
 	root.Handle("/metrics", mx.Handler(os.Getenv("METRICS_TOKEN")))
+	root.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	root.Handle("/", corsMW(middleware.Logger(srv.Routes())))
 
 	port := os.Getenv("PORT")

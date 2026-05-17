@@ -17,8 +17,6 @@ func (s *Server) Routes() http.Handler {
 
 	r.NotFound(s.notFoundHandler)
 
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
-
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/version", s.handleVersion)
 		r.Post("/admin/login", s.adminLogin)
