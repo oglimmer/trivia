@@ -153,7 +153,7 @@ async function save() {
   background: var(--cream-2);
 }
 .profile-dlg__email-hint {
-  margin: -4px 0 0;
+  margin: 6px 0 0;
   font-size: .85rem;
 }
 </style>
