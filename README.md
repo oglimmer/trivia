@@ -280,6 +280,15 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 - **Accessibility**: the option buttons have keyboard focus and decent contrast, but there's no formal WCAG pass — screen-reader labels on the iconic buttons (camera, library, ✓, ✕) would help.
 - **The podium reveal in `Results.vue` is one route with phases** rather than three separate URLs. Functionally identical to "different pages" but the back button skips the whole sequence.
 
+### Capacity notes
+
+Quick assessment of the default Helm resource limits (`backend`: 500m CPU / 512 Mi mem, `postgres`: 500m CPU / 512 Mi mem, `pgxpool.MaxConns = 25`) against an 80-player game:
+
+- **Should work.** WS hub is 81 connections × 2 goroutines + a 256-entry send buffer each — tens of MB at worst. A reveal marshals one `gameState` envelope (~30–60 KB JSON with 80 answers + leaderboard) and fans out to 81 clients; sub-ms CPU.
+- **Tightest path:** each `handleAnswer` does 3 DB queries (`GameByID`, `QuestionByID`, `SaveAnswer`). 80 simultaneous answers → 240 queries against a pool of 25 ≈ 25–50 ms of queueing. Fine at 80, first thing to hurt past ~200.
+- **Number-question rescore** (`rescoreNumberAnswers` in `backend/internal/api/server.go`) issues N sequential `UpdateAnswerScore` writes on reveal. 80 × ~5 ms ≈ 400 ms before the reveal broadcast goes out.
+- **Cheap headroom upgrades** if pushing toward 150–200 players: (1) raise `MaxConns` to ~50 in `backend/internal/db/db.go`; (2) batch the number-question rescore into a single UPDATE; (3) consider an in-memory cache for `GameByID` / `QuestionByID` on the answer hot path.
+
 ### If I were to keep building
 
 1. Add a real integration test (postgres + WS + scoring + reveal) using `testcontainers-go`.
