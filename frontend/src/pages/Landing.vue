@@ -14,6 +14,7 @@
       <label for="join-code">Game code</label>
       <input
         id="join-code"
+        ref="codeInput"
         v-model="code"
         @keyup.enter="join"
         placeholder="abcd"
@@ -49,8 +50,10 @@ const code = ref('')
 const loading = ref(false)
 const err = ref('')
 const store = useGameStore()
+const codeInput = ref<HTMLInputElement | null>(null)
 
 onMounted(async () => {
+  codeInput.value?.focus()
   await store.loadMe()
   if (store.me && store.game) {
     routeForState(store.game.code, store.game.state)
