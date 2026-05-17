@@ -44,7 +44,11 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		userID = u.ID
 	}
 
+	start := time.Now()
 	s.Hub.Serve(w, r, gameID, userID, role)
+	if s.Metrics != nil {
+		s.Metrics.RecordWSSession(string(role), time.Since(start))
+	}
 }
 
 func (s *Server) onWSJoin(c *ws.Client) {

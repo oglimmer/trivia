@@ -11,13 +11,16 @@ import (
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	if s.Metrics != nil {
-		r.Use(s.Metrics.InstrumentHTTP)
-	}
-
 	r.NotFound(s.notFoundHandler)
 
 	r.Route("/api", func(r chi.Router) {
+		// Latency instrumentation is scoped to /api only. /ws is excluded
+		// because its "request duration" is the WebSocket session lifetime,
+		// which would skew the request-latency histogram into hours.
+		// Session lifetime is tracked separately as trivia_ws_session_duration_seconds.
+		if s.Metrics != nil {
+			r.Use(s.Metrics.InstrumentHTTP)
+		}
 		r.Get("/version", s.handleVersion)
 		r.Post("/admin/login", s.adminLogin)
 

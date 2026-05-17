@@ -229,11 +229,17 @@ securityContext:
           <code>trivia_http_in_flight_requests</code>. Path is the chi route
           pattern (<code>/api/games/&#123;code&#125;</code>), not the raw URL,
           so game codes and image UUIDs don't blow up label cardinality.
+          Instrumentation is scoped to <code>/api</code> only —
+          <code>/ws</code> is excluded because the handler's lifetime is the
+          WebSocket session, not request latency.
         </li>
         <li>
           <strong>WebSocket</strong> — <code>trivia_ws_connections</code>
           gauge labelled by role, incremented in the hub's
-          <code>OnJoin</code>/<code>OnLeave</code> callbacks.
+          <code>OnJoin</code>/<code>OnLeave</code> callbacks; plus
+          <code>trivia_ws_session_duration_seconds</code> histogram (by role)
+          observing each session's lifetime when the upgraded connection
+          closes.
         </li>
         <li>
           <strong>Game lifecycle</strong> —

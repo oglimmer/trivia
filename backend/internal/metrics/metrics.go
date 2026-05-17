@@ -42,7 +42,8 @@ type Metrics struct {
 	HTTPDuration *prometheus.HistogramVec
 	HTTPInFlight prometheus.Gauge
 
-	WSConnections *prometheus.GaugeVec
+	WSConnections     *prometheus.GaugeVec
+	WSSessionDuration *prometheus.HistogramVec
 
 	AnswersSubmitted   *prometheus.CounterVec
 	QuestionsActivated prometheus.Counter
@@ -93,6 +94,12 @@ func New(opts Options) *Metrics {
 		Name: "connections",
 		Help: "Currently connected WebSocket clients by role (player|admin).",
 	}, []string{"role"})
+	m.WSSessionDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "trivia", Subsystem: "ws",
+		Name:    "session_duration_seconds",
+		Help:    "Lifetime of a WebSocket session in seconds, labelled by role.",
+		Buckets: []float64{1, 10, 30, 60, 300, 900, 1800, 3600, 7200},
+	}, []string{"role"})
 
 	m.AnswersSubmitted = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "trivia", Subsystem: "game",
@@ -141,7 +148,7 @@ func New(opts Options) *Metrics {
 
 	reg.MustRegister(
 		m.HTTPRequests, m.HTTPDuration, m.HTTPInFlight,
-		m.WSConnections,
+		m.WSConnections, m.WSSessionDuration,
 		m.AnswersSubmitted,
 		m.QuestionsActivated, m.QuestionsRevealed, m.QuestionsAutoClose,
 		m.AISuggestRequests, m.AISuggestDuration,
@@ -280,6 +287,11 @@ func (sr *statusRecorder) Flush() {
 // WS connection helpers.
 func (m *Metrics) WSConnect(role string)    { m.WSConnections.WithLabelValues(role).Inc() }
 func (m *Metrics) WSDisconnect(role string) { m.WSConnections.WithLabelValues(role).Dec() }
+
+// RecordWSSession observes the lifetime of a WebSocket session.
+func (m *Metrics) RecordWSSession(role string, d time.Duration) {
+	m.WSSessionDuration.WithLabelValues(role).Observe(d.Seconds())
+}
 
 // RecordAnswer increments the answer counter by result.
 func (m *Metrics) RecordAnswer(correct bool) {
