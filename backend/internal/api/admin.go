@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/oglimmer/trivia/backend/internal/auth"
+	"github.com/oglimmer/trivia/backend/internal/db"
 )
 
 // ---------- admin login ----------
@@ -97,6 +99,10 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 	}
 	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds), b.ScheduledAt)
 	if err != nil {
+		if errors.Is(err, db.ErrCodeTaken) {
+			writeErr(w, http.StatusConflict, "Game code \""+b.Code+"\" is already in use. Please choose a different code.")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}

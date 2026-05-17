@@ -66,4 +66,5 @@ type Score struct {
 var (
 	ErrNotFound  = errors.New("not found")
 	ErrNameTaken = errors.New("name already taken")
+	ErrCodeTaken = errors.New("game code already taken")
 )

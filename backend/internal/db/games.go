@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+const gameCodeUniqueConstraint = "games_code_key"
 
 const gameColumns = `id, code, name, state, current_question_id, question_state,
 	question_started_at, question_closed_at, question_timeout_seconds, scheduled_at, created_at`
@@ -25,6 +28,10 @@ func (d *DB) CreateGame(ctx context.Context, code, name string, questionTimeoutS
 		RETURNING `+gameColumns,
 		code, name, questionTimeoutSeconds, scheduledAt)
 	if err := scanGame(row, g); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == gameCodeUniqueConstraint {
+			return nil, ErrCodeTaken
+		}
 		return nil, err
 	}
 	return g, nil
