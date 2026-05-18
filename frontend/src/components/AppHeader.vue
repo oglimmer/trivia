@@ -61,15 +61,21 @@ const store = useGameStore()
 const router = useRouter()
 
 async function leave() {
-  const ok = await confirm({
-    title: 'Leave this game?',
-    message: 'You can rejoin later with the same code.',
-    confirmLabel: 'Leave game',
-    cancelLabel: 'Stay',
-    tone: 'danger',
-    icon: '👋',
-  })
-  if (!ok) return
+  if (!store.isFinished) {
+    const hasEmail = !!(store.me?.email || '').trim()
+    const message = hasEmail
+      ? `We sent a rejoin link to ${store.me!.email} — you can get back in from there.`
+      : "You have no email saved, so you won't be able to rejoin this game."
+    const ok = await confirm({
+      title: 'Leave this game?',
+      message,
+      confirmLabel: 'Leave game',
+      cancelLabel: 'Stay',
+      tone: 'danger',
+      icon: '👋',
+    })
+    if (!ok) return
+  }
   disconnect()
   store.logout()
   router.push('/')

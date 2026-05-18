@@ -7,7 +7,7 @@
 
       <span class="hero__eyebrow">Bring-your-own-question</span>
       <h1 class="hero__title">Game <em>night</em>,<br />made by you.</h1>
-      <p class="hero__subtitle">Type the 4-letter code your host shared.</p>
+      <p class="hero__subtitle">Type the code your host shared.</p>
     </section>
 
     <section class="card stack">
@@ -72,8 +72,13 @@ async function join() {
   try {
     const c = code.value.trim().toLowerCase()
     const g = await playerApi.getGame(c)
-    if (g.state === 'setup') router.push(`/g/${c}/join`)
-    else router.push(`/g/${c}/play`)
+    if (g.state === 'finished') {
+      err.value = 'This game has already ended.'
+    } else if (g.state === 'setup') {
+      router.push(`/g/${c}/join`)
+    } else {
+      router.push(`/g/${c}/play`)
+    }
   } catch (e) {
     err.value = errMsg(e, 'No game with that code')
   } finally {

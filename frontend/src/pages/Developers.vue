@@ -44,7 +44,7 @@
       </ul>
       <p>
         Endpoints under <code>/api/images</code> and the public game lookups
-        are unauthenticated — possession of the image UUID or the 4-letter
+        are unauthenticated — possession of the image UUID or the
         game code is the capability.
       </p>
     </section>

@@ -16,34 +16,37 @@
         <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
 
-      <div v-if="game?.state === 'setup'" class="row wrap" style="gap: 10px; align-items: center;">
-        <label for="timeout-input" class="bold" style="margin: 0;">Question timeout</label>
-        <input
-          id="timeout-input"
-          v-model.number="timeoutDraft"
-          type="number"
-          min="5"
-          max="600"
-          step="1"
-          style="width: 90px;"
-        />
-        <span class="muted">seconds</span>
-        <button class="btn-ghost btn-sm" :disabled="savingTimeout || timeoutDraft === game?.questionTimeoutSeconds" @click="saveTimeout">
-          {{ savingTimeout ? '…' : 'Save' }}
-        </button>
-      </div>
-      <div v-if="game?.state === 'setup'" class="row wrap" style="gap: 10px; align-items: center;">
-        <label for="scheduled-input" class="bold" style="margin: 0;">Scheduled start</label>
-        <input
-          id="scheduled-input"
-          v-model="scheduledDraft"
-          type="datetime-local"
-        />
-        <button class="btn-ghost btn-sm" :disabled="savingSchedule || !scheduledDirty" @click="saveSchedule">
-          {{ savingSchedule ? '…' : 'Save' }}
-        </button>
-        <button v-if="scheduledDraft" class="btn-link btn-sm" :disabled="savingSchedule" @click="clearSchedule">
-          Clear
+      <div v-if="game?.state === 'setup'" class="stack" style="gap: 12px;">
+        <div class="row wrap" style="gap: 16px; align-items: flex-end;">
+          <div class="stack" style="gap: 4px; flex: 0 0 auto;">
+            <label for="timeout-input" class="bold" style="margin: 0;">Question timeout</label>
+            <div class="row" style="gap: 6px; align-items: center;">
+              <input
+                id="timeout-input"
+                v-model.number="timeoutDraft"
+                type="number"
+                min="5"
+                max="600"
+                step="1"
+                style="width: 90px;"
+              />
+              <span class="muted">seconds</span>
+            </div>
+          </div>
+          <div class="stack" style="gap: 4px; flex: 1; min-width: 180px;">
+            <label for="scheduled-input" class="bold" style="margin: 0;">Scheduled start</label>
+            <div class="row" style="gap: 6px; align-items: center;">
+              <input
+                id="scheduled-input"
+                v-model="scheduledDraft"
+                type="datetime-local"
+              />
+              <button v-if="scheduledDraft" class="btn-link btn-sm" :disabled="savingSettings" @click="clearSchedule">Clear</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn-ghost btn-sm" style="align-self: flex-start;" :disabled="savingSettings || !settingsDirty" @click="saveSettings">
+          {{ savingSettings ? 'Saving…' : 'Save settings' }}
         </button>
       </div>
       <div v-else-if="game" class="muted" style="font-size: .85rem;">
@@ -175,9 +178,8 @@ const playerAnswered = ref<Set<string>>(new Set())
 const online = ref<Set<string>>(new Set())
 const err = ref('')
 const timeoutDraft = ref(30)
-const savingTimeout = ref(false)
 const scheduledDraft = ref('')
-const savingSchedule = ref(false)
+const savingSettings = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
 const copyingUser = ref('')
@@ -231,11 +233,9 @@ function applyState(d: GameStateMsg) {
     questionTimeoutSeconds: d.questionTimeoutSeconds,
     scheduledAt: d.scheduledAt,
   }
-  // Keep the edit field in sync when we're not actively editing.
-  if (d.state === 'setup' && !savingTimeout.value) {
+  // Keep the edit fields in sync when we're not actively saving.
+  if (d.state === 'setup' && !savingSettings.value) {
     timeoutDraft.value = d.questionTimeoutSeconds || 30
-  }
-  if (d.state === 'setup' && !savingSchedule.value) {
     scheduledDraft.value = isoToLocalInput(d.scheduledAt)
   }
   if (d.question) currentQ.value = d.question
@@ -273,45 +273,36 @@ async function startGame() {
   catch (e) { err.value = errMsg(e) }
 }
 
-async function saveTimeout() {
+const settingsDirty = computed(() =>
+  timeoutDraft.value !== (game.value?.questionTimeoutSeconds || 30) ||
+  scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt)
+)
+
+async function saveSettings() {
   err.value = ''
-  savingTimeout.value = true
+  savingSettings.value = true
   try {
-    await adminApi.updateSettings(props.code, { questionTimeoutSeconds: Number(timeoutDraft.value) || 30 })
+    await adminApi.updateSettings(props.code, {
+      questionTimeoutSeconds: Number(timeoutDraft.value) || 30,
+      scheduledAt: localInputToIso(scheduledDraft.value),
+    })
   } catch (e) {
     err.value = errMsg(e)
   } finally {
-    savingTimeout.value = false
-  }
-}
-
-const scheduledDirty = computed(() => {
-  return scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt)
-})
-
-async function saveSchedule() {
-  err.value = ''
-  savingSchedule.value = true
-  try {
-    const iso = localInputToIso(scheduledDraft.value)
-    await adminApi.updateSettings(props.code, { scheduledAt: iso })
-  } catch (e) {
-    err.value = errMsg(e)
-  } finally {
-    savingSchedule.value = false
+    savingSettings.value = false
   }
 }
 
 async function clearSchedule() {
   err.value = ''
-  savingSchedule.value = true
+  savingSettings.value = true
   try {
     await adminApi.updateSettings(props.code, { scheduledAt: null })
     scheduledDraft.value = ''
   } catch (e) {
     err.value = errMsg(e)
   } finally {
-    savingSchedule.value = false
+    savingSettings.value = false
   }
 }
 

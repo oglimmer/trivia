@@ -10,6 +10,14 @@
       />
       <span v-else class="photo-frame__placeholder">no photo yet</span>
     </div>
+    <div v-if="allowRotate && imageId" class="row">
+      <button class="btn-ghost flex-1" :disabled="busy" @click="rotateImage(-90)" aria-label="Rotate left">
+        ↺ Rotate left
+      </button>
+      <button class="btn-ghost flex-1" :disabled="busy" @click="rotateImage(90)" aria-label="Rotate right">
+        ↻ Rotate right
+      </button>
+    </div>
     <div :class="allowRandom ? 'picker-actions' : 'row'">
       <button class="btn-warn flex-1" :disabled="busy" @click="pick('environment')">
         <span aria-hidden="true">📷</span> Camera
@@ -61,11 +69,13 @@ const props = withDefaults(defineProps<{
   maxSize?: number
   noFrame?: boolean
   allowRandom?: boolean
+  allowRotate?: boolean
 }>(), {
   imageId: '',
   maxSize: 1024,
   noFrame: false,
   allowRandom: false,
+  allowRotate: false,
 })
 const emit = defineEmits<{
   (e: 'update:imageId', v: string): void
@@ -156,6 +166,49 @@ async function uploadImage(blob: Blob): Promise<string> {
   }
   const j = await r.json() as { id: string }
   return j.id
+}
+
+function loadImageEl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Could not load image'))
+    img.src = url
+  })
+}
+
+function canvasToBlob(cvs: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    cvs.toBlob(
+      (b) => b ? resolve(b) : reject(new Error('Could not encode image')),
+      'image/jpeg',
+      0.82,
+    )
+  })
+}
+
+async function rotateImage(deg: 90 | -90) {
+  if (!props.imageId || busy.value) return
+  err.value = ''
+  setBusy(true)
+  try {
+    const img = await loadImageEl(imageUrl(props.imageId, 'medium'))
+    const cvs = document.createElement('canvas')
+    cvs.width = img.height
+    cvs.height = img.width
+    const ctx = cvs.getContext('2d')
+    if (!ctx) throw new Error('Canvas unsupported')
+    ctx.translate(cvs.width / 2, cvs.height / 2)
+    ctx.rotate((deg * Math.PI) / 180)
+    ctx.drawImage(img, -img.width / 2, -img.height / 2)
+    const blob = await canvasToBlob(cvs)
+    const id = await uploadImage(blob)
+    emit('update:imageId', id)
+  } catch (ex) {
+    err.value = (ex as Error).message || 'Rotate failed'
+  } finally {
+    setBusy(false)
+  }
 }
 
 async function generateRandom() {

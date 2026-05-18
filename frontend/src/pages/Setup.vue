@@ -27,7 +27,7 @@
           If you wait here, you will still participate in the game when it starts.
         </p>
 
-        <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" />
+        <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" allow-rotate />
 
         <button class="btn-primary btn-lg btn-block" :disabled="!photoId || pickerBusy" @click="step = 'ai-choice'">
           Continue →
@@ -85,7 +85,7 @@
         </div>
 
         <label>Question</label>
-        <textarea v-model="text" placeholder="What is this thing?" maxlength="160" rows="3"></textarea>
+        <textarea v-model="text" placeholder="What is this thing?" maxlength="600" rows="3"></textarea>
 
         <label>Answer type</label>
         <div class="toggles">
