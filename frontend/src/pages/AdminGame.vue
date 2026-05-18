@@ -13,6 +13,9 @@
       <div class="row wrap" style="gap: 10px;">
         <button v-if="game?.state === 'setup'" class="btn-primary btn-lg" @click="startGame">▶ Start game</button>
         <button v-if="game?.state === 'game'" class="btn-danger" @click="endGame">⏹ End game</button>
+        <button v-if="game?.state === 'finished'" class="btn-danger" :disabled="deletingGame" @click="deleteGame">
+          {{ deletingGame ? 'Deleting…' : '🗑 Delete game' }}
+        </button>
         <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
 
@@ -182,6 +185,7 @@ const scheduledDraft = ref('')
 const savingSettings = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
+const deletingGame = ref(false)
 const copyingUser = ref('')
 const copiedUser = ref('')
 const previewImage = ref('')
@@ -317,6 +321,28 @@ async function endGame() {
   })
   if (!ok) return
   try { await adminApi.finish(props.code) } catch (e) { err.value = errMsg(e) }
+}
+
+async function deleteGame() {
+  const label = game.value?.name ? `"${game.value.name}" (${props.code})` : props.code
+  const ok = await confirm({
+    title: `Delete ${label}?`,
+    message: 'This permanently removes the game, its players, questions, and answers. This cannot be undone.',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Keep',
+    tone: 'danger',
+    icon: '🗑',
+  })
+  if (!ok) return
+  err.value = ''
+  deletingGame.value = true
+  try {
+    await adminApi.deleteGame(props.code)
+    router.replace('/admin/games')
+  } catch (e) {
+    err.value = errMsg(e)
+    deletingGame.value = false
+  }
 }
 
 async function activateNext() {
