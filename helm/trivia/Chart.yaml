@@ -2,8 +2,8 @@ apiVersion: v2
 name: trivia
 description: Self-hosted realtime trivia game (Vue frontend + Go backend + Postgres)
 type: application
-version: 0.1.9
-appVersion: "0.1.9"
+version: 0.1.10
+appVersion: "0.1.10"
 maintainers:
   - name: Oli
 keywords:
