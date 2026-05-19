@@ -189,7 +189,7 @@ func TestJoinGameRequiresName(t *testing.T) {
 	}
 }
 
-func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
+func TestJoinGameAllowedMidGame(t *testing.T) {
 	s, f := testServer(t)
 	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
@@ -198,8 +198,22 @@ func TestJoinGameOnlyAllowedInSetup(t *testing.T) {
 		path:   "/api/games/" + g.Code + "/join",
 		body:   `{"name":"Alice"}`,
 	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 (join allowed mid-game), got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestJoinGameRejectedWhenFinished(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	_ = f.SetGameState(context.TODO(), g.ID, "finished")
+	w := do(t, s, req{
+		method: "POST",
+		path:   "/api/games/" + g.Code + "/join",
+		body:   `{"name":"Alice"}`,
+	})
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400 (game not in setup), got %d", w.Code)
+		t.Fatalf("want 400 (game finished), got %d", w.Code)
 	}
 }
 

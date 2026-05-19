@@ -55,8 +55,8 @@ func (s *Server) joinGame(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		return
 	}
-	if g.State != "setup" {
-		writeErr(w, http.StatusBadRequest, "game not in setup")
+	if g.State == "finished" {
+		writeErr(w, http.StatusBadRequest, "game already finished")
 		return
 	}
 	u, err := s.DB.CreateUser(r.Context(), g.ID, b.Name, imgID, b.Email, randomToken(16))

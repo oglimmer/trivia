@@ -73,11 +73,9 @@ async function join() {
     const c = code.value.trim().toLowerCase()
     const g = await playerApi.getGame(c)
     if (g.state === 'finished') {
-      err.value = 'This game has already ended.'
-    } else if (g.state === 'setup') {
-      router.push(`/g/${c}/join`)
+      router.push(`/g/${c}/results`)
     } else {
-      router.push(`/g/${c}/play`)
+      router.push(`/g/${c}/join`)
     }
   } catch (e) {
     err.value = errMsg(e, 'No game with that code')
