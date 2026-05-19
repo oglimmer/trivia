@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
               -X github.com/oglimmer/trivia/backend/internal/buildinfo.Time=${BUILD_TIME}" \
     -o /out/server ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=build /out/server /app/server
