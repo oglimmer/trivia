@@ -63,7 +63,7 @@ func New(opts Options) *Metrics {
 	// Go runtime + OS process collectors — standard best-practice baseline.
 	reg.MustRegister(
 		collectors.NewGoCollector(
-			collectors.WithGoCollections(collectors.GoRuntimeMetricsCollection|collectors.GoRuntimeMemStatsCollection),
+			collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll),
 		),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
