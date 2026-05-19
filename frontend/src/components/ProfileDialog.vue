@@ -35,7 +35,13 @@
         />
 
         <label>Selfie</label>
-        <PhotoPicker v-model:image-id="photoId" @busy="pickerBusy = $event" no-frame allow-random />
+        <PhotoPicker
+          v-model:image-id="photoId"
+          @busy="pickerBusy = $event"
+          no-frame
+          allow-random
+          :no-clear="hadSavedPhoto"
+        />
 
         <label for="profile-dlg-email">Email (optional)</label>
         <input
@@ -87,6 +93,7 @@ const store = useGameStore()
 
 const name = ref('')
 const photoId = ref('')
+const hadSavedPhoto = ref(false)
 const pickerBusy = ref(false)
 const email = ref('')
 const err = ref('')
@@ -109,6 +116,7 @@ watch(() => props.open, (v) => {
   if (v) {
     name.value = store.me?.name || ''
     photoId.value = store.me?.photoImageId || ''
+    hadSavedPhoto.value = !!store.me?.photoImageId
     email.value = store.me?.email || ''
     err.value = ''
     saving.value = false

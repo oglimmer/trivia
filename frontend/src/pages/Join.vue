@@ -143,7 +143,7 @@ async function submit() {
 
 <style scoped>
 .email-hint {
-  margin: -4px 0 0;
+  margin: 4px 0 0;
   font-size: .85rem;
 }
 </style>

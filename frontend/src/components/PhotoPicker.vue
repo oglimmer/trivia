@@ -35,7 +35,7 @@
         <span aria-hidden="true">🎲</span> Random
       </button>
       <button
-        v-if="imageId && !allowRandom"
+        v-if="imageId && !allowRandom && !noClear"
         class="btn-danger btn-icon"
         :disabled="busy"
         @click="clear"
@@ -44,9 +44,9 @@
     </div>
     <div v-if="allowRandom && isRandom" class="helper helper--row">
       <span>🎲 Tap <strong>Random</strong> again to roll a new one</span>
-      <button class="btn-link" @click="clear">Clear</button>
+      <button v-if="!noClear" class="btn-link" @click="clear">Clear</button>
     </div>
-    <div v-else-if="allowRandom && imageId" class="helper helper--row">
+    <div v-else-if="allowRandom && imageId && !noClear" class="helper helper--row">
       <span></span>
       <button class="btn-link" @click="clear">Clear photo</button>
     </div>
@@ -70,12 +70,14 @@ const props = withDefaults(defineProps<{
   noFrame?: boolean
   allowRandom?: boolean
   allowRotate?: boolean
+  noClear?: boolean
 }>(), {
   imageId: '',
   maxSize: 1024,
   noFrame: false,
   allowRandom: false,
   allowRotate: false,
+  noClear: false,
 })
 const emit = defineEmits<{
   (e: 'update:imageId', v: string): void
