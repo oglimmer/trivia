@@ -279,6 +279,15 @@ onUnmounted(() => {
 watch(() => game.value && game.value.state, () => { /* stay on page */ })
 
 async function startGame() {
+  const ok = await confirm({
+    title: 'Start the game now?',
+    message: 'Players will be locked in and the first question will go live. Settings can no longer be changed.',
+    confirmLabel: 'Start game',
+    cancelLabel: 'Not yet',
+    tone: 'primary',
+    icon: '▶',
+  })
+  if (!ok) return
   err.value = ''
   try { await adminApi.setState(props.code, 'game') }
   catch (e) { err.value = errMsg(e) }
