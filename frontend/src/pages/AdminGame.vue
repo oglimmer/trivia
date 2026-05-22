@@ -146,8 +146,11 @@
 
     <template v-if="game?.state === 'finished'">
       <div class="card stack">
-        <h2>Final standings</h2>
-        <Leaderboard :entries="leaderboard" />
+        <div class="row between" style="margin-bottom: 4px;">
+          <h2 style="margin: 0;">Final standings</h2>
+          <span class="tag tag--blue">{{ onlineCount }} / {{ users.length }} online</span>
+        </div>
+        <Leaderboard :entries="leaderboard" :online="online" />
       </div>
     </template>
   </main>
