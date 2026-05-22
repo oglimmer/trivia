@@ -63,7 +63,9 @@ onMounted(async () => {
   try {
     store.setLeaderboard(await playerApi.leaderboard(props.code))
   } catch {}
-  if (leaderboard.value.length < 3) phase.value = leaderboard.value.length === 0 ? 'ladder' : 'one'
+  if (leaderboard.value.length === 0) phase.value = 'ladder'
+  else if (leaderboard.value.length === 1) phase.value = 'one'
+  else if (leaderboard.value.length === 2) phase.value = 'two'
 
   await nextTick()
   initialReady.value = true
