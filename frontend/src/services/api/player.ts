@@ -6,6 +6,7 @@ import type {
   LeaderboardEntry,
   MeResponse,
   Question,
+  QuestionResults,
   User,
 } from '@/types'
 
@@ -28,5 +29,6 @@ export const playerApi = {
   listQuestions: (code: string) => request<Question[]>('GET', `/games/${code}/questions`),
   putQuestion: (code: string, body: QuestionBody) => request<Question>('PUT', `/games/${code}/questions`, body),
   leaderboard: (code: string) => request<LeaderboardEntry[]>('GET', `/games/${code}/leaderboard`),
+  results: (code: string) => request<QuestionResults[]>('GET', `/games/${code}/results`),
   aiSuggest: (body: AISuggestBody) => request<AISuggestResponse>('POST', '/ai/suggest', body),
 }

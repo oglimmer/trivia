@@ -51,6 +51,29 @@ export interface Answer {
   responseMs: number
 }
 
+export interface ResultsBucket {
+  label: string
+  value: unknown
+  count: number
+  isCorrect: boolean
+}
+
+export interface QuestionResults {
+  questionId: string
+  text: string
+  photoImageId?: string
+  authorName?: string
+  answerType: AnswerType
+  options: string[]
+  correct: string | number
+  totalPlayers: number
+  answeredCount: number
+  correctCount: number
+  incorrectCount: number
+  noAnswerCount: number
+  distribution: ResultsBucket[]
+}
+
 export interface LeaderboardEntry {
   userId: string
   userName: string

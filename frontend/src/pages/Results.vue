@@ -28,8 +28,27 @@
 
         <template v-else>
           <div class="card stack">
-            <h1>Final standings</h1>
-            <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
+            <h1 style="margin: 0;">Final standings</h1>
+            <div class="toggles results-tabs">
+              <button
+                type="button"
+                :class="{ active: view === 'standings' }"
+                @click="view = 'standings'"
+              >Standings</button>
+              <button
+                type="button"
+                :class="{ active: view === 'breakdown' }"
+                @click="setView('breakdown')"
+              >Question breakdown</button>
+            </div>
+            <div v-if="view === 'standings'">
+              <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
+            </div>
+            <ResultsBreakdown
+              v-else
+              :questions="results"
+              :loading="resultsLoading"
+            />
           </div>
         </template>
       </div>
@@ -47,15 +66,36 @@ import { useGameStore } from '@/stores/game'
 import { playerApi } from '@/services/api'
 import Spotlight from '@/components/Spotlight.vue'
 import Leaderboard from '@/components/Leaderboard.vue'
+import ResultsBreakdown from '@/components/ResultsBreakdown.vue'
+import type { QuestionResults } from '@/types'
 
 const props = defineProps<{ code: string }>()
 const store = useGameStore()
 const phase = ref<'three' | 'two' | 'one' | 'ladder'>('three')
 const initialReady = ref(false)
+const view = ref<'standings' | 'breakdown'>('standings')
+const results = ref<QuestionResults[]>([])
+const resultsLoading = ref(false)
+let resultsLoaded = false
 
 const leaderboard = computed(() => store.leaderboard)
 const byRank = computed(() => leaderboard.value)
 const myId = computed(() => store.me && store.me.id)
+
+async function setView(next: 'standings' | 'breakdown'): Promise<void> {
+  view.value = next
+  if (next === 'breakdown' && !resultsLoaded) {
+    resultsLoading.value = true
+    try {
+      results.value = await playerApi.results(props.code)
+      resultsLoaded = true
+    } catch {
+      // Leave results empty; the component shows an empty-state message.
+    } finally {
+      resultsLoading.value = false
+    }
+  }
+}
 
 onMounted(async () => {
   await store.loadMe()
@@ -71,3 +111,9 @@ onMounted(async () => {
   initialReady.value = true
 })
 </script>
+
+<style scoped>
+.results-tabs {
+  grid-template-columns: 1fr 1fr;
+}
+</style>

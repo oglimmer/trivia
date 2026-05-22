@@ -632,6 +632,87 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 
 // ---------- delete game cleanup ----------
 
+func TestResultsGatedOnFinished(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+
+	// Game not finished — endpoint returns an empty slice, not the data.
+	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/results"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if got := decode[[]questionResults](t, w); len(got) != 0 {
+		t.Errorf("setup: want empty results, got %+v", got)
+	}
+}
+
+func TestResultsBreakdown(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-b")
+	_, _ = f.CreateUser(context.TODO(), g.ID, "Cara", nil, "", "tok-c")
+
+	// One choice question with 3 options; correct is index 1.
+	qChoice, _ := f.UpsertQuestion(context.TODO(), g.ID, "author-1",
+		"Which?", nil, "choice",
+		json.RawMessage(`["A","B","C"]`), json.RawMessage(`1`))
+	// Two players picked the correct option, one picked the wrong one.
+	_ = f.SaveAnswer(context.TODO(), qChoice.ID, "user-1", json.RawMessage(`1`), 500, true, 100)
+	_ = f.SaveAnswer(context.TODO(), qChoice.ID, "user-2", json.RawMessage(`1`), 800, true, 90)
+	_ = f.SaveAnswer(context.TODO(), qChoice.ID, "user-3", json.RawMessage(`0`), 900, false, 0)
+
+	// One yesno question — correct is "yes". Only two of three players answer.
+	qYes, _ := f.UpsertQuestion(context.TODO(), g.ID, "author-2",
+		"Real?", nil, "yesno", json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+	_ = f.SaveAnswer(context.TODO(), qYes.ID, "user-1", json.RawMessage(`"yes"`), 400, true, 100)
+	_ = f.SaveAnswer(context.TODO(), qYes.ID, "user-2", json.RawMessage(`"no"`), 700, false, 0)
+
+	_ = f.SetGameState(context.TODO(), g.ID, "finished")
+
+	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/results"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	got := decode[[]questionResults](t, w)
+	if len(got) != 2 {
+		t.Fatalf("want 2 questions, got %d", len(got))
+	}
+
+	byID := map[string]questionResults{}
+	for _, r := range got {
+		byID[r.QuestionID] = r
+	}
+
+	c := byID[qChoice.ID]
+	if c.TotalPlayers != 3 || c.AnsweredCount != 3 || c.CorrectCount != 2 || c.IncorrectCount != 1 || c.NoAnswerCount != 0 {
+		t.Errorf("choice tallies wrong: %+v", c)
+	}
+	if len(c.Distribution) != 3 {
+		t.Fatalf("choice distribution: want 3 buckets, got %d", len(c.Distribution))
+	}
+	if c.Distribution[1].Count != 2 || !c.Distribution[1].IsCorrect {
+		t.Errorf("choice correct-bucket wrong: %+v", c.Distribution[1])
+	}
+	if c.Distribution[0].Count != 1 || c.Distribution[0].IsCorrect {
+		t.Errorf("choice wrong-bucket wrong: %+v", c.Distribution[0])
+	}
+
+	y := byID[qYes.ID]
+	if y.AnsweredCount != 2 || y.NoAnswerCount != 1 {
+		t.Errorf("yesno answered/noanswer wrong: %+v", y)
+	}
+	if len(y.Distribution) != 2 {
+		t.Fatalf("yesno distribution: want 2 buckets, got %d", len(y.Distribution))
+	}
+	if y.Distribution[0].Label != "Yes" || y.Distribution[0].Count != 1 || !y.Distribution[0].IsCorrect {
+		t.Errorf("yesno yes-bucket wrong: %+v", y.Distribution[0])
+	}
+	if y.Distribution[1].Label != "No" || y.Distribution[1].Count != 1 || y.Distribution[1].IsCorrect {
+		t.Errorf("yesno no-bucket wrong: %+v", y.Distribution[1])
+	}
+}
+
 func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
 	imgs := newFakeImageStore()

@@ -57,6 +57,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/games/{code}/questions", s.listQuestionsPublic)
 		r.Put("/games/{code}/questions", s.putQuestion)
 		r.Get("/games/{code}/leaderboard", s.leaderboard)
+		r.Get("/games/{code}/results", s.results)
 		r.Post("/ai/suggest", s.aiSuggest)
 	})
 
