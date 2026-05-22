@@ -17,6 +17,7 @@
         <header class="row between">
           <span :class="['tag', qState === 'revealed' ? 'tag--mint' : 'tag--pink']">
             {{ qState === 'revealed' ? '✓ Answer' : 'Question' }}
+            <template v-if="questionIndex && totalQuestions"> {{ questionIndex }} / {{ totalQuestions }}</template>
           </span>
           <div v-if="qState === 'active'" class="timer-ring" :style="`--pct:${ringPct}`" aria-label="time remaining">
             <span>{{ remaining }}</span>
@@ -135,7 +136,12 @@
         </ul>
       </div>
 
-      <div v-if="qState === 'revealed'" class="card">
+      <div v-if="qState === 'revealed' && leaderboardHidden" class="card card--yellow center stack">
+        <div style="font-size: 2rem;">🤐</div>
+        <div class="bold" style="font-size: 1.1rem;">Scores hidden — final stretch!</div>
+        <div class="muted">Standings are revealed when the game ends.</div>
+      </div>
+      <div v-else-if="qState === 'revealed'" class="card">
         <h2>Leaderboard</h2>
         <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
       </div>
@@ -175,6 +181,9 @@ const { remaining, ringPct } = useQuestionCountdown(
 
 const q = computed(() => store.question)
 const qState = computed(() => store.game && store.game.questionState)
+const questionIndex = computed(() => store.game?.questionIndex || 0)
+const totalQuestions = computed(() => store.game?.totalQuestions || 0)
+const leaderboardHidden = computed(() => !!store.game?.leaderboardHidden)
 const ack = computed(() => store.lastAnswerAck && q.value && store.lastAnswerAck.questionId === q.value.id ? store.lastAnswerAck : null)
 const leaderboard = computed(() => store.leaderboard)
 const myId = computed(() => store.me && store.me.id)

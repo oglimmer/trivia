@@ -89,6 +89,8 @@
         :question-state="game?.questionState"
         :remaining="remaining"
         :author-name="currentQ ? userName(currentQ.userId) : ''"
+        :question-index="game?.questionIndex"
+        :total-questions="game?.totalQuestions"
         @activate-next="activateNext"
         @reveal="reveal"
         @next="next"
@@ -236,6 +238,8 @@ function applyState(d: GameStateMsg) {
     questionStartedAt: d.questionStartedAt,
     questionTimeoutSeconds: d.questionTimeoutSeconds,
     scheduledAt: d.scheduledAt,
+    questionIndex: d.questionIndex,
+    totalQuestions: d.totalQuestions,
   }
   // Keep the edit fields in sync when we're not actively saving.
   if (d.state === 'setup' && !savingSettings.value) {

@@ -1,7 +1,12 @@
 <template>
   <div class="card stack">
     <div class="row between">
-      <h2 style="margin: 0;">Now playing</h2>
+      <h2 style="margin: 0;">
+        Now playing
+        <span v-if="questionIndex && totalQuestions" class="muted" style="font-weight: 600; font-size: .9rem;">
+          · Question {{ questionIndex }} / {{ totalQuestions }}
+        </span>
+      </h2>
       <span class="timer tag tag--pink" v-if="questionState === 'active'">{{ remaining }}s</span>
       <span class="tag tag--mint" v-else-if="questionState === 'revealed'">Revealed</span>
     </div>
@@ -32,21 +37,30 @@
     <div class="row wrap">
       <button class="btn-primary btn-lg" v-if="!question" @click="emit('activate-next')">▶ Start first question</button>
       <button class="btn-warn btn-lg" v-if="questionState === 'active'" @click="emit('reveal')">Reveal answer</button>
-      <button class="btn-primary btn-lg" v-if="questionState === 'revealed'" @click="emit('next')">Next question →</button>
+      <button class="btn-primary btn-lg" v-if="questionState === 'revealed'" @click="emit('next')">
+        {{ isLastQuestion ? '🏆 Reveal winner' : 'Next question →' }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { imageUrl } from '@/services/images'
 import type { Question } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   question: Question | null
   questionState: string | undefined
   remaining: number
   authorName: string
+  questionIndex?: number
+  totalQuestions?: number
 }>()
+
+const isLastQuestion = computed(() =>
+  !!props.questionIndex && !!props.totalQuestions && props.questionIndex >= props.totalQuestions
+)
 
 const emit = defineEmits<{
   (e: 'activate-next'): void

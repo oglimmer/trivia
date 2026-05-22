@@ -20,6 +20,19 @@ const (
 	maxQuestionTimeoutSeconds     = 600
 )
 
+// leaderboardSuspenseTail hides the running leaderboard from players during the
+// final stretch of the game (the last N questions) to keep the finish exciting.
+// The full board is still shown once the game is finished.
+const leaderboardSuspenseTail = 3
+
+// questionIndex > 0 already implies totalQuestions > 0, so no separate guard.
+func inLeaderboardSuspense(g *db.Game, totalQuestions, questionIndex int) bool {
+	if g.State == "finished" || questionIndex <= 0 {
+		return false
+	}
+	return totalQuestions-questionIndex < leaderboardSuspenseTail
+}
+
 // staleUserThreshold is how long a player can be silent before the
 // setup→game transition removes them from the lobby.
 const staleUserThreshold = 30 * time.Minute

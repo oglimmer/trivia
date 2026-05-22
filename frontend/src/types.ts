@@ -26,6 +26,9 @@ export interface Game {
   questionStartedAt?: string | null
   questionTimeoutSeconds?: number
   scheduledAt?: string | null
+  questionIndex?: number
+  totalQuestions?: number
+  leaderboardHidden?: boolean
 }
 
 export interface Question {
@@ -120,6 +123,9 @@ export interface GameStateMsg {
   questionStartedAt?: string | null
   questionTimeoutSeconds?: number
   scheduledAt?: string | null
+  questionIndex?: number
+  totalQuestions?: number
+  leaderboardHidden?: boolean
   question?: Question | null
   leaderboard?: LeaderboardEntry[]
   answers?: Answer[]

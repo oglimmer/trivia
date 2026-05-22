@@ -50,6 +50,9 @@ export const useGameStore = defineStore('game', () => {
           questionStartedAt: d.questionStartedAt,
           questionTimeoutSeconds: d.questionTimeoutSeconds,
           scheduledAt: d.scheduledAt,
+          questionIndex: d.questionIndex,
+          totalQuestions: d.totalQuestions,
+          leaderboardHidden: !!d.leaderboardHidden,
         }
         question.value = d.question || null
         if (d.leaderboard) leaderboard.value = d.leaderboard

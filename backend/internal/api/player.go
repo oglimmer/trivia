@@ -318,6 +318,24 @@ func (s *Server) leaderboard(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, []db.Score{})
 		return
 	}
+	qs, err := s.DB.ListQuestions(r.Context(), g.ID, false)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	questionIndex := 0
+	if g.CurrentQuestionID != nil {
+		for i := range qs {
+			if qs[i].ID == *g.CurrentQuestionID {
+				questionIndex = i + 1
+				break
+			}
+		}
+	}
+	if inLeaderboardSuspense(g, len(qs), questionIndex) {
+		writeJSON(w, 200, []db.Score{})
+		return
+	}
 	sc, err := s.DB.Leaderboard(r.Context(), g.ID)
 	if err != nil {
 		serverError(w, r, err)

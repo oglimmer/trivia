@@ -30,31 +30,48 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 	}
 	data := out["data"].(map[string]any)
 
+	qs, _ := s.DB.ListQuestions(ctx, g.ID, true)
+	data["totalQuestions"] = len(qs)
+	questionIndex := 0
+	var current *db.Question
 	if g.CurrentQuestionID != nil {
-		q, err := s.DB.QuestionByID(ctx, *g.CurrentQuestionID)
-		if err == nil {
-			qd := map[string]any{
-				"id":           q.ID,
-				"text":         q.Text,
-				"photoImageId": q.PhotoImageID,
-				"answerType":   q.AnswerType,
-				"options":      q.Options,
-				"userId":       q.UserID,
+		for i := range qs {
+			if qs[i].ID == *g.CurrentQuestionID {
+				questionIndex = i + 1
+				current = &qs[i]
+				break
 			}
-			if asAdmin || g.QuestionState == "revealed" {
-				qd["correct"] = q.Correct
-			}
-			data["question"] = qd
-			if g.QuestionState == "revealed" {
-				ans, _ := s.DB.AnswersForQuestion(ctx, q.ID)
-				data["answers"] = ans
-			}
+		}
+	}
+	data["questionIndex"] = questionIndex
+
+	if current != nil {
+		qd := map[string]any{
+			"id":           current.ID,
+			"text":         current.Text,
+			"photoImageId": current.PhotoImageID,
+			"answerType":   current.AnswerType,
+			"options":      current.Options,
+			"userId":       current.UserID,
+		}
+		if asAdmin || g.QuestionState == "revealed" {
+			qd["correct"] = current.Correct
+		}
+		data["question"] = qd
+		if g.QuestionState == "revealed" {
+			ans, _ := s.DB.AnswersForQuestion(ctx, current.ID)
+			data["answers"] = ans
 		}
 	}
 
 	if g.State == "finished" || g.QuestionState == "revealed" {
-		lb, _ := s.DB.Leaderboard(ctx, g.ID)
-		data["leaderboard"] = lb
+		hidden := !asAdmin && inLeaderboardSuspense(g, len(qs), questionIndex)
+		if hidden {
+			data["leaderboardHidden"] = true
+		} else {
+			lb, _ := s.DB.Leaderboard(ctx, g.ID)
+			data["leaderboard"] = lb
+		}
 	}
 
 	return out
