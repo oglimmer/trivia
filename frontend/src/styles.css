@@ -443,8 +443,7 @@ label {
   display: grid; place-items: center;
   background: var(--cream-2);
   border: 2px solid var(--ink);
-  font-family: var(--font-display);
-  font-style: italic;
+  font-family: var(--font-ui);
   font-weight: 900;
   flex-shrink: 0;
 }
@@ -857,11 +856,10 @@ label {
   padding: 18px;
 }
 .q-card__text {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 900;
+  font-family: var(--font-ui);
+  font-weight: 800;
   font-size: clamp(1.4rem, 5vw, 1.75rem);
-  line-height: 1.1;
+  line-height: 1.25;
   margin: 10px 0 0;
 }
 

@@ -111,7 +111,7 @@
           </div>
           <div v-else-if="q.answerType === 'number'" class="card card--yellow center">
             <span class="muted" style="font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: .8rem;">Correct answer</span>
-            <div style="font-family: var(--font-display); font-style: italic; font-weight: 900; font-size: 3rem; line-height: 1; margin-top: 6px;">{{ correctNumber }}</div>
+            <div style="font-family: var(--font-ui); font-weight: 900; font-size: 3rem; line-height: 1; margin-top: 6px;">{{ correctNumber }}</div>
           </div>
         </template>
       </article>
