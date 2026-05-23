@@ -17,13 +17,13 @@
           <dt>Frontend</dt>
           <dd>
             <span class="build-dlg__ver">v{{ frontend.version }}</span>
-            <span class="build-dlg__meta">{{ frontend.gitCommit }} · {{ dateOnly(frontend.buildTime) }}</span>
+            <span class="build-dlg__meta">{{ frontend.gitCommit }} · {{ formatBuildTime(frontend.buildTime) }}</span>
           </dd>
 
           <dt>Backend</dt>
           <dd v-if="backend">
             <span class="build-dlg__ver">v{{ backend.version }}</span>
-            <span class="build-dlg__meta">{{ backend.gitCommit }} · {{ dateOnly(backend.buildTime) }}</span>
+            <span class="build-dlg__meta">{{ backend.gitCommit }} · {{ formatBuildTime(backend.buildTime) }}</span>
           </dd>
           <dd v-else class="build-dlg__meta">Loading…</dd>
         </dl>
@@ -54,8 +54,17 @@ const closeBtn = ref<HTMLButtonElement | null>(null)
 
 function close() { emit('close') }
 
-function dateOnly(s: string): string {
-  return /^\d{4}-\d{2}-\d{2}T/.test(s) ? s.slice(0, 10) : s
+function formatBuildTime(s: string): string {
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return s
+  const parts = new Intl.DateTimeFormat(undefined, {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZoneName: 'short',
+  }).formatToParts(d)
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
+  const tz = get('timeZoneName')
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}${tz ? ` ${tz}` : ''}`
 }
 
 useModal(() => !!props.open, () => closeBtn.value)
@@ -85,8 +94,8 @@ useModal(() => !!props.open, () => closeBtn.value)
   display: flex;
   flex-direction: column;
   gap: 2px;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .build-dlg__ver { color: var(--ink); font-weight: 700; }
-.build-dlg__meta { color: var(--muted); font-size: .76rem; }
+.build-dlg__meta { color: var(--muted); font-size: .76rem; white-space: nowrap; }
 </style>
