@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -224,6 +225,332 @@ func TestIntegration_GameFlow(t *testing.T) {
 	if finalState.State != "finished" {
 		t.Errorf("game state: want finished, got %q", finalState.State)
 	}
+}
+
+// TestIntegration_TwentyPlayers exercises the system at lobby scale (20
+// players) with three question types — yes/no, 4-option choice, number — and
+// three edge-case player roles that don't show up in the happy-path test:
+//
+//   - LateJoiner: joins via HTTP AFTER the host has flipped state=game. Mid-game
+//     joins are allowed (see TestJoinGameAllowedMidGame). They WS-connect
+//     before the first question is activated so they can answer everything.
+//   - NoQuestion: joins during setup but never authors a question. Must still
+//     be able to answer and accumulate points.
+//   - Ghost: joins during setup AND authors a question, then never WS-connects
+//     (i.e. closes the tab before the host hits ▶). Their question must
+//     survive into game mode (it's the user FK that's SET NULL, the question
+//     itself stays), and they must still appear on the final leaderboard with
+//     0 points (LEFT JOIN in db.Leaderboard).
+//
+// Scoring is set up so every correct-group player ends with the same
+// per-question bonus floor — base * 4 questions = 800 — and every wrong-group
+// player ends at 0, which makes the assertions deterministic against real
+// Postgres timing.
+func TestIntegration_TwentyPlayers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	pg := startPostgres(t, ctx)
+	d := connectDB(t, ctx, pg)
+
+	hub := ws.NewHub()
+	srv := New(d, hub, &ai.Client{}, &mail.Mailer{})
+	imgSvc := images.New(d.Pool)
+	srv.Images = imgSvc
+
+	httpSrv := httptest.NewServer(srv.Routes())
+	t.Cleanup(httpSrv.Close)
+
+	// Each question needs a distinct image (storePNGImage perturbs pixels so
+	// the dedupe key differs).
+	imgYesAlice := storePNGImage(t, ctx, imgSvc, 64, 48)
+	imgChoiceBob := storePNGImage(t, ctx, imgSvc, 80, 60)
+	imgNumberCarol := storePNGImage(t, ctx, imgSvc, 96, 72)
+	imgYesGhost := storePNGImage(t, ctx, imgSvc, 112, 84)
+
+	// ---- admin + game ----
+	var login struct{ Token string }
+	doJSON(t, "POST", httpSrv.URL+"/api/admin/login", nil, `{"password":"letmein"}`, &login)
+	adminHdr := http.Header{"Authorization": {"Bearer " + login.Token}}
+
+	var game db.Game
+	// Bump the per-question timeout so the test isn't racing against the
+	// auto-close timer if Postgres is slow on a cold start.
+	doJSON(t, "POST", httpSrv.URL+"/api/admin/games", adminHdr,
+		`{"name":"Twenty","questionTimeoutSeconds":60}`, &game)
+
+	type playerInfo struct {
+		Name   string
+		Token  string
+		UserID string
+	}
+	join := func(name string) playerInfo {
+		var r struct{ Token, UserID string }
+		doJSON(t, "POST", httpSrv.URL+"/api/games/"+game.Code+"/join", nil,
+			fmt.Sprintf(`{"name":%q}`, name), &r)
+		return playerInfo{Name: name, Token: r.Token, UserID: r.UserID}
+	}
+
+	// ---- 19 players join in setup (LateJoiner stays out for now) ----
+	alice := join("Alice")
+	bob := join("Bob")
+	carol := join("Carol")
+	ghost := join("Ghost")
+	noQuestion := join("NoQuestion")
+	regulars := make([]playerInfo, 14)
+	for i := range regulars {
+		regulars[i] = join(fmt.Sprintf("Reg-%02d", i+1))
+	}
+
+	// ---- 4 questions, three of which from "real" authors plus the ghost ----
+	putQ := func(token, body string) db.Question {
+		var q db.Question
+		doJSON(t, "PUT", httpSrv.URL+"/api/games/"+game.Code+"/questions",
+			http.Header{"X-Player-Token": {token}}, body, &q)
+		return q
+	}
+	qAlice := putQ(alice.Token, fmt.Sprintf(
+		`{"text":"Sky blue?","photoImageId":%q,"answerType":"yesno","options":[],"correct":"yes"}`, imgYesAlice))
+	qBob := putQ(bob.Token, fmt.Sprintf(
+		`{"text":"Pick C","photoImageId":%q,"answerType":"choice","options":["A","B","C","D"],"correct":2}`, imgChoiceBob))
+	qCarol := putQ(carol.Token, fmt.Sprintf(
+		`{"text":"Target?","photoImageId":%q,"answerType":"number","options":[],"correct":100}`, imgNumberCarol))
+	qGhost := putQ(ghost.Token, fmt.Sprintf(
+		`{"text":"Reverse y/n","photoImageId":%q,"answerType":"yesno","options":[],"correct":"no"}`, imgYesGhost))
+
+	// Sanity check the setup snapshot.
+	var adminView struct {
+		Questions []db.Question `json:"questions"`
+		Users     []db.User     `json:"users"`
+	}
+	doJSON(t, "GET", httpSrv.URL+"/api/admin/games/"+game.Code, adminHdr, "", &adminView)
+	if len(adminView.Users) != 19 || len(adminView.Questions) != 4 {
+		t.Fatalf("setup snapshot: want 19 users + 4 questions, got %d / %d",
+			len(adminView.Users), len(adminView.Questions))
+	}
+
+	// ---- transition to game; question order is randomized here ----
+	doStatus(t, "POST", httpSrv.URL+"/api/admin/games/"+game.Code+"/state", adminHdr,
+		`{"state":"game"}`, http.StatusNoContent)
+
+	// ---- LateJoiner shows up after kickoff ----
+	lateJoiner := join("LateJoiner")
+
+	// Ghost's question must survive the state transition even though Ghost
+	// never connected: the questions table's user FK is SET NULL on delete,
+	// so the question row itself stays.
+	doJSON(t, "GET", httpSrv.URL+"/api/admin/games/"+game.Code, adminHdr, "", &adminView)
+	if len(adminView.Users) != 20 || len(adminView.Questions) != 4 {
+		t.Fatalf("post-game snapshot: want 20 users + 4 questions, got %d / %d",
+			len(adminView.Users), len(adminView.Questions))
+	}
+
+	// Map questionID → answer plan so the test can pick the right value once
+	// the random order is observed at activation time.
+	type qPlan struct {
+		AnswerType string
+		Correct    any
+		Wrong      any
+	}
+	plans := map[string]qPlan{
+		qAlice.ID: {"yesno", "yes", "no"},
+		qBob.ID:   {"choice", 2, 0},
+		qCarol.ID: {"number", 100, 1000},
+		qGhost.ID: {"yesno", "no", "yes"},
+	}
+
+	// ---- WS connect for everyone except Ghost ----
+	type playerWS struct {
+		info playerInfo
+		ws   *wsClient
+	}
+	playWS := []playerWS{
+		{alice, dialWS(t, httpSrv.URL, "?token="+alice.Token)},
+		{bob, dialWS(t, httpSrv.URL, "?token="+bob.Token)},
+		{carol, dialWS(t, httpSrv.URL, "?token="+carol.Token)},
+		{noQuestion, dialWS(t, httpSrv.URL, "?token="+noQuestion.Token)},
+		{lateJoiner, dialWS(t, httpSrv.URL, "?token="+lateJoiner.Token)},
+	}
+	for _, r := range regulars {
+		playWS = append(playWS, playerWS{r, dialWS(t, httpSrv.URL, "?token="+r.Token)})
+	}
+	adminWS := dialWS(t, httpSrv.URL, "?role=admin&token="+login.Token+"&code="+game.Code)
+
+	// Drain the initial gameState each client gets on join.
+	for _, p := range playWS {
+		_ = p.ws.waitFor(t, 5*time.Second, "gameState")
+	}
+	_ = adminWS.waitFor(t, 5*time.Second, "gameState")
+
+	// Correct group: 15 players (Alice, Bob, Carol, NoQuestion, LateJoiner +
+	// 10 regulars). Wrong group: the last 4 regulars. Ghost: not in either,
+	// will appear on the leaderboard with 0 points via the LEFT JOIN.
+	correct := map[string]bool{
+		alice.Name: true, bob.Name: true, carol.Name: true,
+		noQuestion.Name: true, lateJoiner.Name: true,
+	}
+	for i := 0; i < 10; i++ {
+		correct[regulars[i].Name] = true
+	}
+	wrongRegulars := regulars[10:]
+
+	// ---- run all four questions ----
+	for i := 0; i < 4; i++ {
+		qid := advanceToNext(t, httpSrv.URL, game.Code, adminHdr, adminWS, i == 0)
+		plan, ok := plans[qid]
+		if !ok {
+			t.Fatalf("activated unknown question id %q", qid)
+		}
+
+		// Wait for every player WS to see the new active question before any
+		// of them answer; otherwise a too-early answer races the broadcast.
+		for _, p := range playWS {
+			p.ws.waitForGameStateWhere(t, 5*time.Second, func(d map[string]any) bool {
+				return d["questionState"] == "active" && stringField(d, "currentQuestionId") == qid
+			})
+		}
+
+		// Give the question a measurable lifetime so responseMs > 0 and the
+		// time bonus exercises its decay branch (otherwise it'd be the
+		// degenerate base + base/2 every time).
+		time.Sleep(80 * time.Millisecond)
+
+		// Answer in parallel: 19 client sockets running through the hub at
+		// once is the realistic case and roughly matches the capacity
+		// reasoning in the README ("80 simultaneous answers → 240 queries").
+		var wg sync.WaitGroup
+		for _, p := range playWS {
+			p := p
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				value := plan.Wrong
+				if correct[p.info.Name] {
+					value = plan.Correct
+				}
+				p.ws.sendJSON(t, map[string]any{
+					"type": "answer",
+					"data": map[string]any{"questionId": qid, "value": value},
+				})
+			}()
+		}
+		wg.Wait()
+
+		// Every connected player should get their personal answerAck back.
+		for _, p := range playWS {
+			p.ws.waitFor(t, 10*time.Second, "answerAck")
+		}
+
+		doStatus(t, "POST", httpSrv.URL+"/api/admin/games/"+game.Code+"/reveal", adminHdr,
+			"", http.StatusNoContent)
+		_ = adminWS.waitForGameStateWhere(t, 5*time.Second, func(d map[string]any) bool {
+			return d["questionState"] == "revealed" && stringField(d, "currentQuestionId") == qid
+		})
+	}
+
+	// One more "next" closes the game.
+	var nextResp struct {
+		Done       bool
+		QuestionID string
+	}
+	doJSON(t, "POST", httpSrv.URL+"/api/admin/games/"+game.Code+"/next", adminHdr, "", &nextResp)
+	if !nextResp.Done {
+		t.Fatalf("expected done=true after 4 questions, got %+v", nextResp)
+	}
+
+	// ---- final assertions on the real DB leaderboard ----
+	var leaderboard []db.Score
+	doJSON(t, "GET", httpSrv.URL+"/api/games/"+game.Code+"/leaderboard", nil, "", &leaderboard)
+	if len(leaderboard) != 20 {
+		t.Fatalf("expected 20 leaderboard rows (incl. Ghost), got %d", len(leaderboard))
+	}
+
+	score := map[string]db.Score{}
+	for _, s := range leaderboard {
+		score[s.UserName] = s
+	}
+
+	// Correct group: base sum is 100+300+300+100 = 800. Time bonus is
+	// strictly < base/2 per question (it'd be == base/2 only at responseMs=0,
+	// which never happens), so the ceiling is 100·1.5 + 300·1.5 + 300·1.5 +
+	// 100·1.5 = 1200. Allow a small headroom for any rounding quirks.
+	for name := range correct {
+		s, ok := score[name]
+		if !ok {
+			t.Errorf("missing leaderboard row for %s", name)
+			continue
+		}
+		if s.Points < 800 || s.Points > 1200 {
+			t.Errorf("%s: expected 800 ≤ points ≤ 1200, got %d", name, s.Points)
+		}
+		if s.Correct != 4 {
+			t.Errorf("%s: expected 4 correct, got %d", name, s.Correct)
+		}
+	}
+
+	// Wrong group: deliberately wrong on every question, including the number
+	// (1000 vs. correct=100 puts them out of the rank-3 closeness band).
+	for _, w := range wrongRegulars {
+		s, ok := score[w.Name]
+		if !ok {
+			t.Errorf("missing leaderboard row for wrong player %s", w.Name)
+			continue
+		}
+		if s.Points != 0 || s.Correct != 0 {
+			t.Errorf("%s: expected 0/0, got %d/%d", w.Name, s.Points, s.Correct)
+		}
+	}
+
+	// Ghost authored a question and never WS-connected, so they submitted
+	// nothing — the LEFT JOIN in db.Leaderboard should still surface them.
+	if g, ok := score[ghost.Name]; !ok {
+		t.Errorf("Ghost missing from leaderboard")
+	} else if g.Points != 0 || g.Correct != 0 {
+		t.Errorf("Ghost: expected 0/0 (never answered), got %d/%d", g.Points, g.Correct)
+	}
+
+	// LateJoiner answered every question — must hit the same correct-group
+	// floor, which confirms a mid-game join can still score on Q1 (the one
+	// they technically missed the setup for).
+	if s := score[lateJoiner.Name]; s.Correct != 4 {
+		t.Errorf("LateJoiner: expected 4 correct, got %d (points=%d)", s.Correct, s.Points)
+	}
+
+	// Game should be finished.
+	var final struct {
+		State string `json:"state"`
+	}
+	doJSON(t, "GET", httpSrv.URL+"/api/games/"+game.Code, nil, "", &final)
+	if final.State != "finished" {
+		t.Errorf("game state: want finished, got %q", final.State)
+	}
+}
+
+// advanceToNext activates the first question (when first==true) or asks the
+// admin to advance to the next one, then waits for the admin's WS to see the
+// active state and returns the new currentQuestionId.
+func advanceToNext(t *testing.T, baseURL, code string, adminHdr http.Header, adminWS *wsClient, first bool) string {
+	t.Helper()
+	if first {
+		doStatus(t, "POST", baseURL+"/api/admin/games/"+code+"/activate", adminHdr,
+			`{}`, http.StatusNoContent)
+		state := adminWS.waitForGameStateWhere(t, 5*time.Second, func(d map[string]any) bool {
+			return d["questionState"] == "active"
+		})
+		return stringField(state, "currentQuestionId")
+	}
+	var nextResp struct {
+		Done       bool
+		QuestionID string
+	}
+	doJSON(t, "POST", baseURL+"/api/admin/games/"+code+"/next", adminHdr, "", &nextResp)
+	if nextResp.Done {
+		t.Fatalf("/next returned done=true before all questions were exhausted")
+	}
+	_ = adminWS.waitForGameStateWhere(t, 5*time.Second, func(d map[string]any) bool {
+		return d["questionState"] == "active" && stringField(d, "currentQuestionId") == nextResp.QuestionID
+	})
+	return nextResp.QuestionID
 }
 
 // answerValuesFor returns (alice, bob, aliceShouldWin) values for the given
