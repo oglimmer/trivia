@@ -17,6 +17,12 @@ data:
         # proxy nginx.conf for docker-compose; this ConfigMap overrides it.
         root /usr/share/nginx/html;
 
+        # index.html must revalidate on every navigation so a new deploy picks
+        # up without a manual reload. Vite-emitted /assets/* are content-hashed,
+        # so their filenames change when the bundle changes — safe to cache
+        # forever. Without these headers nginx sends no Cache-Control and the
+        # browser falls back to heuristic freshness on /, which is why the
+        # build info used to look stale after a redeploy.
         location = /index.html {
             add_header Cache-Control "no-cache" always;
         }

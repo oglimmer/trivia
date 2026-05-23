@@ -161,6 +161,40 @@ SMTP_USER / SMTP_PASSWORD  # magic-link sender</pre>
     </section>
 
     <section class="card stack legal-prose api-prose">
+      <h2>Frontend cache headers</h2>
+      <p>
+        The <code>web</code> pod's nginx serves the Vue build with a two-tier
+        cache policy so a new deploy reaches users on their next navigation,
+        without a manual reload:
+      </p>
+      <pre class="api-code"># helm/trivia/templates/configmap-frontend-nginx.yaml
+location = /index.html {
+    add_header Cache-Control "no-cache" always;
+}
+
+location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+}</pre>
+      <p>
+        <code>no-cache</code> on <code>index.html</code> doesn't mean "don't
+        cache" — it means "revalidate before use." Browsers send an
+        <code>If-None-Match</code> on every load; nginx returns
+        <code>304</code> when unchanged (cheap) or the new HTML with new
+        hashed bundle URLs when a deploy has happened. The hashed
+        <code>/assets/*</code> filenames flip with every build, so the
+        <code>immutable</code> + 1-year max-age is safe — a new bundle is a
+        new URL.
+      </p>
+      <p>
+        Without these headers nginx sends no <code>Cache-Control</code> at
+        all and the browser falls back to heuristic freshness from
+        <code>Last-Modified</code>, which is why the build info shown in the
+        footer used to look stale after a redeploy until the user manually
+        reloaded.
+      </p>
+    </section>
+
+    <section class="card stack legal-prose api-prose">
       <h2>Bundled vs external Postgres</h2>
       <p>
         The chart ships a single-replica Postgres on a 5 GiB PVC — fine for a
