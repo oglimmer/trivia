@@ -706,6 +706,21 @@ execute_release() {
     new_version=$(bump_version "$current_version" "$bump")
     log_info "Releasing version $new_version..."
 
+    # Pre-flight: run the testcontainers-backed integration suite before any
+    # version bumps, commits, tags, or image pushes. If the real
+    # postgres+WS+scoring path is broken we want to know now, not after
+    # tagging. Skipped on --dry-run so a paperwork check stays fast.
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} (cd $BACKEND_DIR && go test -tags=integration -count=1 ./internal/api/)"
+    else
+        log_info "Running backend integration tests (requires Docker)..."
+        if ! (cd "$BACKEND_DIR" && go test -tags=integration -count=1 ./internal/api/); then
+            log_error "Integration tests failed — aborting release."
+            exit 1
+        fi
+        log_success "Integration tests passed."
+    fi
+
     # Update frontend version
     log_info "Updating frontend version to $new_version..."
     if [[ "$DRY_RUN" == true ]]; then

@@ -160,7 +160,7 @@ Hot-reload dev (talks to backend in Docker on `:8080`):
 cd frontend && npm run dev
 ```
 
-The `oglimmer.sh` helper at the repo root wraps the common loops: `./oglimmer.sh start|stop|status|logs|test` for a local Go binary; `./oglimmer.sh build [-f|-b]` for Docker build + push + `kubectl rollout restart`; `./oglimmer.sh release --bump minor` to bump the frontend `package.json` and Helm `Chart.yaml` together, tag, and push.
+The `oglimmer.sh` helper at the repo root wraps the common loops: `./oglimmer.sh start|stop|status|logs|test` for a local Go binary; `./oglimmer.sh build [-f|-b]` for Docker build + push + `kubectl rollout restart`; `./oglimmer.sh release --bump minor` runs the integration test suite (`-tags=integration`, needs Docker) as a pre-flight, then bumps the frontend `package.json` and Helm `Chart.yaml` together, tags, and pushes — a failing integration test aborts before anything is committed.
 
 ## Kubernetes (Helm)
 
