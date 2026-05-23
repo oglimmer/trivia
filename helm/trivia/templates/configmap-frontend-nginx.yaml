@@ -15,8 +15,17 @@ data:
         # SPA only — /api, /ws, and /health are handled by the ingress and
         # routed directly to the backend service. The image ships an in-cluster
         # proxy nginx.conf for docker-compose; this ConfigMap overrides it.
+        root /usr/share/nginx/html;
+
+        location = /index.html {
+            add_header Cache-Control "no-cache" always;
+        }
+
+        location /assets/ {
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+        }
+
         location / {
-            root /usr/share/nginx/html;
             try_files $uri $uri/ /index.html;
         }
     }
