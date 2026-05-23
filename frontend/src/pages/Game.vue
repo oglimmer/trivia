@@ -9,6 +9,9 @@
         <div class="spinner" aria-hidden="true"></div>
         <h2>Waiting for the host…</h2>
         <p class="muted">The next question is about to drop.</p>
+        <button type="button" class="btn-ghost" @click="scoringInfoOpen = true">
+          🎯 How scoring works
+        </button>
       </div>
     </template>
 
@@ -146,6 +149,8 @@
         <Leaderboard :entries="leaderboard" :my-id="myId || undefined" />
       </div>
     </template>
+
+    <ScoringInfoDialog :open="scoringInfoOpen" @close="scoringInfoOpen = false" />
   </main>
 </template>
 
@@ -160,6 +165,7 @@ import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 import { useWrongSoundEffect } from '@/composables/useWrongSoundEffect'
 import { pickVerdictLine } from '@/utils/verdict'
 import Leaderboard from '@/components/Leaderboard.vue'
+import ScoringInfoDialog from '@/components/ScoringInfoDialog.vue'
 
 const wrongSound = useWrongSoundEffect()
 
@@ -171,6 +177,7 @@ const numberGuess = ref<number | ''>('')
 const letters = ['A', 'B', 'C', 'D']
 const initialReady = ref(false)
 const animateVerdict = ref(false)
+const scoringInfoOpen = ref(false)
 let pageLoaded = false
 let stopListen: (() => void) | null = null
 

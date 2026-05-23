@@ -12,7 +12,12 @@
 
         <EmailCapture v-if="offerEmail" />
 
-        <button class="btn-ghost" @click="startEdit">← Edit my question</button>
+        <div class="row" style="justify-content: center; flex-wrap: wrap;">
+          <button class="btn-ghost" @click="scoringInfoOpen = true">
+            🎯 How scoring works
+          </button>
+          <button class="btn-ghost" @click="startEdit">← Edit my question</button>
+        </div>
       </div>
 
       <!-- Step 1: Photo -->
@@ -168,6 +173,8 @@
       </button>
     </transition>
 
+    <ScoringInfoDialog :open="scoringInfoOpen" @close="scoringInfoOpen = false" />
+
     <transition name="fade">
       <div v-if="aiBusy" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ai-busy-title">
         <div class="modal stack center">
@@ -200,6 +207,7 @@ import { useRouter } from 'vue-router'
 import PhotoPicker from '@/components/PhotoPicker.vue'
 import Stepper from '@/components/Stepper.vue'
 import EmailCapture from '@/components/EmailCapture.vue'
+import ScoringInfoDialog from '@/components/ScoringInfoDialog.vue'
 import { playerApi } from '@/services/api'
 import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
@@ -227,6 +235,7 @@ const aiBusy = ref(false)
 const aiConfirm = ref(false)
 const step = ref<'photo' | 'ai-choice' | 'editor'>('photo')
 const initialReady = ref(false)
+const scoringInfoOpen = ref(false)
 const nowMs = ref(Date.now())
 let clockTimer: ReturnType<typeof setInterval> | null = null
 const saveBtnRef = ref<HTMLButtonElement | null>(null)
