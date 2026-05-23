@@ -142,6 +142,12 @@ Run the backend tests:
 cd backend && go test ./...
 ```
 
+Run the integration test (boots a Postgres container via `testcontainers-go` and drives a full game over the real WebSocket hub + scoring + reveal — requires a running Docker daemon):
+
+```bash
+cd backend && go test -tags=integration -run TestIntegration ./internal/api/
+```
+
 Build the frontend without Docker (type-check then bundle):
 
 ```bash
@@ -270,7 +276,6 @@ Connection lifecycle: server pings every 30 s with a 75 s read deadline. The cli
 - **No HTTPS / WSS in the compose setup**. Fine for LAN play; the Helm chart terminates TLS at ingress for prod.
 - **No rate limiting** on `/api/games/{code}/join`, `/api/ai/suggest`, or magic-link sends triggered via `PUT /api/me` — all spammable. Add a per-IP / per-game token bucket if exposing publicly.
 - **JWT secret defaults to a dev value** if `JWT_SECRET` is unset. Loud-fail on startup would be safer.
-- **No tests for the WebSocket layer** beyond a manual smoke script. Worth adding an integration test that boots a real `httptest.Server` + pgx with `testcontainers`.
 - **Migrations are idempotent `*.sql` files**, not versioned with a tool like `goose`/`atlas`. Adding a column today is fine; renaming one needs a tool.
 - **No game/image cleanup**. Old games linger forever; deleting a game doesn't touch its players' photos because the FK on `images` is `ON DELETE SET NULL` (per the `docs/image-architecture.md` design). Easy wins: a daily job that drops games older than N days, plus a periodic orphan sweep that deletes `images` rows no longer referenced by `users.photo_image_id` or `questions.photo_image_id` (CASCADE handles `image_variants`).
 - **No host-side reorder**: the admin can delete a question in setup, but ordering is still randomized once on transition to `game`.
@@ -291,10 +296,9 @@ Quick assessment of the default Helm resource limits (`backend`: 500m CPU / 512 
 
 ### If I were to keep building
 
-1. Add a real integration test (postgres + WS + scoring + reveal) using `testcontainers-go`.
-2. Move the image bytes off Postgres to S3/MinIO (metadata + dedupe stay in `images` / `image_variants`); the serving endpoint becomes a redirect or signed-URL issuer. Only worth it once DB volume gets uncomfortable.
-3. WebP/AVIF variants alongside the JPEG thumb/medium (~30% smaller at equal quality), negotiated via the `Accept` header. Doubles per-image storage but cuts every image fetch.
-4. Blurhash / LQIP placeholders — a ~20-char hash stored on each `images` row, returned alongside `photoImageId`, rendered as a blurred gradient while the real thumbnail loads. Perceived-perf polish, not bytes-on-the-wire.
-5. Per-game settings panel: point shape, reveal autoplay (the answer window is already configurable).
-6. Multi-admin / SSO if this ever needs to scale past one host.
-7. PWA install + offline page so players don't lose state if their connection blips.
+1. Move the image bytes off Postgres to S3/MinIO (metadata + dedupe stay in `images` / `image_variants`); the serving endpoint becomes a redirect or signed-URL issuer. Only worth it once DB volume gets uncomfortable.
+2. WebP/AVIF variants alongside the JPEG thumb/medium (~30% smaller at equal quality), negotiated via the `Accept` header. Doubles per-image storage but cuts every image fetch.
+3. Blurhash / LQIP placeholders — a ~20-char hash stored on each `images` row, returned alongside `photoImageId`, rendered as a blurred gradient while the real thumbnail loads. Perceived-perf polish, not bytes-on-the-wire.
+4. Per-game settings panel: point shape, reveal autoplay (the answer window is already configurable).
+5. Multi-admin / SSO if this ever needs to scale past one host.
+6. PWA install + offline page so players don't lose state if their connection blips.
