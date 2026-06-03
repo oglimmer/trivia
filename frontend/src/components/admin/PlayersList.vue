@@ -34,7 +34,13 @@
           title="Remove player"
         >
           <span v-if="deletingId === u.id">…</span>
-          <span v-else aria-hidden="true">🗑</span>
+          <svg v-else class="trash-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18" />
+            <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+          </svg>
         </button>
       </li>
       <li v-if="!users.length" class="muted center" style="justify-content: center;">No players yet.</li>
@@ -93,5 +99,9 @@ const onlineCount = computed(() => props.users.filter(u => props.online.has(u.id
   font-size: 1rem;
   line-height: 1;
   flex-shrink: 0;
+}
+.trash-icon {
+  width: 18px;
+  height: 18px;
 }
 </style>
