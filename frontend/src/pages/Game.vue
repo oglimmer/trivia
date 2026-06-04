@@ -68,11 +68,13 @@
             </button>
           </div>
           <div v-else-if="q.answerType === 'number'" class="stack">
+            <div class="muted center bold" style="font-size: .85rem; letter-spacing: .04em;">🔢 Type in a number</div>
             <input
               v-model.number="numberGuess"
               type="number"
+              inputmode="decimal"
               step="any"
-              placeholder="Your best guess"
+              placeholder="e.g. 42"
               style="font-size: 1.4rem; text-align: center;"
             />
             <button class="btn-primary btn-lg btn-block" @click="answer(Number(numberGuess))" :disabled="numberGuess === ''">
