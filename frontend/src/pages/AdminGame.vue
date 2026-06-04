@@ -14,7 +14,17 @@
         <button v-if="game?.state === 'setup'" class="btn-primary btn-lg" @click="startGame">▶ Start game</button>
         <button v-if="game?.state === 'game'" class="btn-danger" @click="endGame">⏹ End game</button>
         <button v-if="game?.state === 'finished'" class="btn-danger" :disabled="deletingGame" @click="deleteGame">
-          {{ deletingGame ? 'Deleting…' : '🗑 Delete game' }}
+          <template v-if="deletingGame">Deleting…</template>
+          <template v-else>
+            <svg class="trash-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+            Delete game
+          </template>
         </button>
         <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
@@ -152,6 +162,13 @@
         </div>
         <Leaderboard :entries="leaderboard" :online="online" />
       </div>
+      <div class="card stack">
+        <h2 style="margin: 0;">Question breakdown</h2>
+        <p class="muted" style="margin: 0; font-size: .9rem;">
+          Players vote for the best question on their results screen. Tallies update live.
+        </p>
+        <ResultsBreakdown :questions="results" :loading="resultsLoading" show-counts />
+      </div>
     </template>
   </main>
 </template>
@@ -168,11 +185,12 @@ import { errMsg } from '@/composables/errMsg'
 import { isoToLocalInput, localInputToIso, formatScheduled } from '@/utils/schedule'
 import { copyToClipboard } from '@/composables/useClipboard'
 import Leaderboard from '@/components/Leaderboard.vue'
+import ResultsBreakdown from '@/components/ResultsBreakdown.vue'
 import ImagePreviewModal from '@/components/ImagePreviewModal.vue'
 import QuestionSubmissions from '@/components/admin/QuestionSubmissions.vue'
 import PlayersList from '@/components/admin/PlayersList.vue'
 import LiveQuestion from '@/components/admin/LiveQuestion.vue'
-import type { Game, GameStateMsg, LeaderboardEntry, Question, User } from '@/types'
+import type { Game, GameStateMsg, LeaderboardEntry, Question, QuestionResults, User, VoteUpdateMsg } from '@/types'
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -182,6 +200,9 @@ const users = ref<User[]>([])
 const questions = ref<Question[]>([])
 const currentQ = ref<Question | null>(null)
 const leaderboard = ref<LeaderboardEntry[]>([])
+const results = ref<QuestionResults[]>([])
+const resultsLoading = ref(false)
+let resultsLoaded = false
 const playerAnswered = ref<Set<string>>(new Set())
 const online = ref<Set<string>>(new Set())
 const err = ref('')
@@ -229,6 +250,32 @@ async function load() {
   }
 }
 
+// Load the per-question breakdown (incl. best-question vote tallies) once the
+// game is finished. Guarded so a flurry of gameState messages won't refetch.
+async function loadResults() {
+  if (resultsLoaded || resultsLoading.value) return
+  resultsLoading.value = true
+  try {
+    // Per-question stats come from the public results endpoint; the vote
+    // tallies are admin-only and fetched separately, then merged in.
+    const [res, votes] = await Promise.all([
+      adminApi.results(props.code),
+      adminApi.votes(props.code),
+    ])
+    results.value = res.map(q => ({ ...q, voteCount: votes[q.questionId] ?? 0 }))
+    resultsLoaded = true
+  } catch (e) {
+    err.value = errMsg(e)
+  } finally {
+    resultsLoading.value = false
+  }
+}
+
+function applyVoteUpdate(d: VoteUpdateMsg) {
+  const q = results.value.find(x => x.questionId === d.questionId)
+  if (q) q.voteCount = d.count
+}
+
 function applyState(d: GameStateMsg) {
   if (d.serverNow) {
     serverClockOffsetMs.value = new Date(d.serverNow).getTime() - Date.now()
@@ -255,6 +302,7 @@ function applyState(d: GameStateMsg) {
   if (d.questionState === 'active') {
     playerAnswered.value = new Set()
   }
+  if (d.state === 'finished') loadResults()
 }
 
 onMounted(async () => {
@@ -267,8 +315,10 @@ onMounted(async () => {
     else if (m.type === 'questionsAdmin') questions.value = (m.data as Question[]) || []
     else if (m.type === 'playerAnswered') playerAnswered.value.add((m.data as { userId: string }).userId)
     else if (m.type === 'presence') online.value = new Set((m.data as { online?: string[] }).online || [])
+    else if (m.type === 'voteUpdate') applyVoteUpdate(m.data as VoteUpdateMsg)
   })
   wsConnectAdmin(localStorage.getItem('adminToken') || '', props.code)
+  if (game.value?.state === 'finished') loadResults()
 })
 
 onUnmounted(() => {
@@ -452,6 +502,11 @@ async function removeQuestion(q: Question) {
   background: var(--paper);
   color: var(--ink);
   box-shadow: 2px 2px 0 var(--ink);
+}
+.trash-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: -4px;
 }
 .state-pill.state-setup    { background: var(--blue-2); }
 .state-pill.state-game     { background: var(--pink); color: var(--paper); }

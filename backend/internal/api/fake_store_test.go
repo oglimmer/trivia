@@ -23,6 +23,7 @@ type fakeStore struct {
 	users     map[string]*db.User     // keyed by ID
 	questions map[string]*db.Question // keyed by ID
 	answers   map[string]*db.Answer   // keyed by questionID+"|"+userID
+	votes     map[string]string       // keyed by gameID+"|"+userID -> questionID
 	now       func() time.Time
 	seq       int
 }
@@ -36,6 +37,7 @@ func newFakeStore() *fakeStore {
 		users:     map[string]*db.User{},
 		questions: map[string]*db.Question{},
 		answers:   map[string]*db.Answer{},
+		votes:     map[string]string{},
 		now:       time.Now,
 	}
 }
@@ -537,6 +539,52 @@ func (f *fakeStore) Leaderboard(_ context.Context, gameID string) ([]db.Score, e
 		return strings.Compare(out[i].UserName, out[j].UserName) < 0
 	})
 	return out, nil
+}
+
+// ---- Votes ----
+
+func voteKey(gameID, userID string) string { return gameID + "|" + userID }
+
+func (f *fakeStore) SaveVote(_ context.Context, gameID, questionID, userID string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	k := voteKey(gameID, userID)
+	if _, exists := f.votes[k]; exists {
+		return false, nil // ON CONFLICT (game_id, user_id) DO NOTHING
+	}
+	f.votes[k] = questionID
+	return true, nil
+}
+
+func (f *fakeStore) VoteCounts(_ context.Context, gameID string) (map[string]int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]int{}
+	prefix := gameID + "|"
+	for k, qid := range f.votes {
+		if strings.HasPrefix(k, prefix) {
+			out[qid]++
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStore) VoteCountForQuestion(_ context.Context, questionID string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, qid := range f.votes {
+		if qid == questionID {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (f *fakeStore) UserVote(_ context.Context, gameID, userID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.votes[voteKey(gameID, userID)], nil
 }
 
 // ---- cloning helpers ----

@@ -7,10 +7,14 @@
     <div v-else-if="!questions.length" class="card card--cream center muted">
       No question data yet.
     </div>
+    <p v-if="!loading && votable && questions.length" class="vote-hint">
+      <template v-if="myVote">★ Thanks — your pick for best question is locked in.</template>
+      <template v-else>Crown the best question — you get one vote, and it's final.</template>
+    </p>
     <article
       v-for="(q, i) in questions"
       :key="q.questionId"
-      class="card stack breakdown-card"
+      :class="['card stack breakdown-card', { 'breakdown-card--winner': showCounts && isWinner(q) }]"
     >
       <header class="breakdown-card__head">
         <span class="breakdown-card__index">Q{{ i + 1 }}</span>
@@ -20,6 +24,15 @@
             by {{ q.authorName }}
           </p>
         </div>
+        <span
+          v-if="showCounts"
+          class="breakdown-card__votes"
+          :class="{ 'breakdown-card__votes--winner': isWinner(q) }"
+        >
+          <span aria-hidden="true">{{ isWinner(q) ? '🏆' : '★' }}</span>
+          {{ q.voteCount ?? 0 }}
+          <span class="breakdown-card__votes-label">{{ (q.voteCount ?? 0) === 1 ? 'vote' : 'votes' }}</span>
+        </span>
       </header>
       <div class="breakdown-card__body">
         <img
@@ -70,18 +83,55 @@
           </ul>
         </div>
       </div>
+      <footer v-if="votable" class="breakdown-card__vote">
+        <button
+          v-if="myVote === q.questionId"
+          type="button"
+          class="btn-primary btn-sm"
+          disabled
+        >★ Your pick</button>
+        <button
+          v-else-if="!myVote"
+          type="button"
+          class="btn-ghost btn-sm"
+          :disabled="voting"
+          @click="emit('vote', q.questionId)"
+        >Vote best question</button>
+      </footer>
     </article>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { imageUrl } from '@/services/images'
 import type { QuestionResults } from '@/types'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   questions: QuestionResults[]
   loading?: boolean
-}>()
+  // When true, render the one-vote-per-player "best question" controls.
+  votable?: boolean
+  // Display the best-question vote tallies and winner highlight. Admin-only —
+  // players must never see counts, or the running tally would bias their pick.
+  showCounts?: boolean
+  // The questionId this player has already voted for ('' = not voted yet).
+  myVote?: string
+  // A vote request is in flight — disables the buttons to prevent double-submit.
+  voting?: boolean
+}>(), { loading: false, votable: false, showCounts: false, myVote: '', voting: false })
+
+const emit = defineEmits<{ (e: 'vote', questionId: string): void }>()
+
+// The leading vote tally across all questions; cards matching it (and with at
+// least one vote) get the winner treatment. A tie crowns every leader.
+const topVotes = computed(() =>
+  props.questions.reduce((max, q) => Math.max(max, q.voteCount ?? 0), 0),
+)
+
+function isWinner(q: QuestionResults): boolean {
+  return topVotes.value > 0 && (q.voteCount ?? 0) === topVotes.value
+}
 
 function pct(count: number, total: number): number {
   if (!total || total <= 0) return 0
@@ -135,6 +185,43 @@ function denominator(q: QuestionResults): number {
 .breakdown-card__author {
   margin: 0;
   font-size: .8rem;
+}
+.vote-hint {
+  margin: 0;
+  font-weight: 700;
+  font-size: .9rem;
+  color: var(--muted);
+}
+.breakdown-card--winner {
+  border-color: var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  background: var(--mint-2);
+}
+.breakdown-card__votes {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  font-weight: 800;
+  font-size: .85rem;
+  white-space: nowrap;
+}
+.breakdown-card__votes--winner {
+  background: var(--mint);
+}
+.breakdown-card__votes-label {
+  font-weight: 600;
+  font-size: .75rem;
+  color: var(--muted);
+}
+.breakdown-card__vote {
+  display: flex;
+  justify-content: flex-end;
 }
 .breakdown-card__body {
   display: flex;

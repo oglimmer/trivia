@@ -30,5 +30,8 @@ export const playerApi = {
   putQuestion: (code: string, body: QuestionBody) => request<Question>('PUT', `/games/${code}/questions`, body),
   leaderboard: (code: string) => request<LeaderboardEntry[]>('GET', `/games/${code}/leaderboard`),
   results: (code: string) => request<QuestionResults[]>('GET', `/games/${code}/results`),
+  myVote: (code: string) => request<{ questionId: string }>('GET', `/games/${code}/myvote`),
+  castVote: (code: string, questionId: string) =>
+    request<{ questionId: string; cast: boolean }>('POST', `/games/${code}/vote`, { questionId }),
   aiSuggest: (body: AISuggestBody) => request<AISuggestResponse>('POST', '/ai/suggest', body),
 }

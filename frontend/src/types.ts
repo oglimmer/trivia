@@ -72,6 +72,10 @@ export interface QuestionResults {
   incorrectCount: number
   noAnswerCount: number
   distribution: ResultsBucket[]
+  // Best-question vote tally. Admin-only: the public results endpoint omits it
+  // so players can't see the running count and be biased. The admin view fills
+  // it in from the admin votes endpoint.
+  voteCount?: number
 }
 
 export interface LeaderboardEntry {
@@ -163,6 +167,11 @@ export interface PresenceMsg {
   online?: string[]
 }
 
+export interface VoteUpdateMsg {
+  questionId: string
+  count: number
+}
+
 export type WSMessage =
   | { type: '_connected' }
   | { type: '_disconnected' }
@@ -173,5 +182,6 @@ export type WSMessage =
   | { type: 'playerAnswered'; data: PlayerAnsweredMsg }
   | { type: 'presence'; data: PresenceMsg }
   | { type: 'answerAck'; data: AnswerAck }
+  | { type: 'voteUpdate'; data: VoteUpdateMsg }
 
 export type WSListener = (msg: WSMessage) => void

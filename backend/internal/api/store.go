@@ -53,6 +53,12 @@ type Store interface {
 	UpdateAnswerScore(ctx context.Context, questionID, userID string, isCorrect bool, points int) error
 	AnswersForQuestion(ctx context.Context, questionID string) ([]db.Answer, error)
 	Leaderboard(ctx context.Context, gameID string) ([]db.Score, error)
+
+	// Votes (best-question)
+	SaveVote(ctx context.Context, gameID, questionID, userID string) (bool, error)
+	VoteCounts(ctx context.Context, gameID string) (map[string]int, error)
+	VoteCountForQuestion(ctx context.Context, questionID string) (int, error)
+	UserVote(ctx context.Context, gameID, userID string) (string, error)
 }
 
 // Compile-time check that *db.DB still satisfies Store.

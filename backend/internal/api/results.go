@@ -66,6 +66,9 @@ func (s *Server) results(w http.ResponseWriter, r *http.Request) {
 	}
 	totalPlayers := len(users)
 
+	// Note: best-question vote tallies are deliberately NOT included here. This
+	// endpoint is public, so exposing counts would let players see the running
+	// vote and bias their own pick. Counts are admin-only via adminVotes.
 	out := make([]questionResults, 0, len(qs))
 	for _, q := range qs {
 		ans, err := s.DB.AnswersForQuestion(r.Context(), q.ID)

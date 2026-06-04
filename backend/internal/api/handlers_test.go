@@ -713,6 +713,120 @@ func TestResultsBreakdown(t *testing.T) {
 	}
 }
 
+func TestCastVoteRejectedBeforeFinished(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
+	q, _ := f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Q?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+
+	w := do(t, s, req{
+		method:   "POST",
+		path:     "/api/games/" + g.Code + "/vote",
+		body:     `{"questionId":"` + q.ID + `"}`,
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409 before finished, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestCastVoteIsFinalAndCounted(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
+	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-b")
+	q1, _ := f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Q1?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+	q2, _ := f.UpsertQuestion(context.TODO(), g.ID, bob.ID, "Q2?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"no"`))
+	_ = f.SetGameState(context.TODO(), g.ID, "finished")
+
+	// Alice votes for q1.
+	w := do(t, s, req{
+		method:   "POST",
+		path:     "/api/games/" + g.Code + "/vote",
+		body:     `{"questionId":"` + q1.ID + `"}`,
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("first vote: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	first := decode[map[string]any](t, w)
+	if first["questionId"] != q1.ID || first["cast"] != true {
+		t.Fatalf("first vote response wrong: %+v", first)
+	}
+
+	// Alice tries to switch to q2 — votes are final, so this is a no-op that
+	// returns her original pick and does NOT move the count.
+	w = do(t, s, req{
+		method:   "POST",
+		path:     "/api/games/" + g.Code + "/vote",
+		body:     `{"questionId":"` + q2.ID + `"}`,
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("second vote: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	second := decode[map[string]any](t, w)
+	if second["questionId"] != q1.ID || second["cast"] != false {
+		t.Fatalf("re-vote should be locked to q1 and not cast: %+v", second)
+	}
+
+	// myvote reflects Alice's locked pick.
+	w = do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/myvote", playerTo: alice.Token})
+	mine := decode[map[string]string](t, w)
+	if mine["questionId"] != q1.ID {
+		t.Errorf("myvote: want %q, got %q", q1.ID, mine["questionId"])
+	}
+
+	// Bob has not voted yet.
+	w = do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/myvote", playerTo: bob.Token})
+	if got := decode[map[string]string](t, w)["questionId"]; got != "" {
+		t.Errorf("bob myvote: want empty, got %q", got)
+	}
+
+	// Vote tallies are admin-only: q1 has exactly one vote, q2 none.
+	w = do(t, s, req{method: "GET", path: "/api/admin/games/" + g.Code + "/votes", bearer: adminBearer(t)})
+	counts := decode[map[string]int](t, w)
+	if counts[q1.ID] != 1 {
+		t.Errorf("q1 votes: want 1, got %d", counts[q1.ID])
+	}
+	if counts[q2.ID] != 0 {
+		t.Errorf("q2 votes: want 0, got %d", counts[q2.ID])
+	}
+
+	// The public results endpoint must NOT leak any vote tally, or the running
+	// count would bias players still deciding their pick.
+	w = do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/results"})
+	for _, raw := range decode[[]map[string]any](t, w) {
+		if _, ok := raw["voteCount"]; ok {
+			t.Errorf("public results leaked voteCount: %+v", raw)
+		}
+	}
+}
+
+func TestCastVoteRejectsForeignQuestion(t *testing.T) {
+	s, f := testServer(t)
+	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz1", 30, nil)
+	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz2", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g1.ID, "Alice", nil, "", "tok-a")
+	// A question that belongs to a different game.
+	other, _ := f.UpsertQuestion(context.TODO(), g2.ID, "author", "Q?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+	_ = f.SetGameState(context.TODO(), g1.ID, "finished")
+
+	w := do(t, s, req{
+		method:   "POST",
+		path:     "/api/games/" + g1.Code + "/vote",
+		body:     `{"questionId":"` + other.ID + `"}`,
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for foreign question, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
 func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
 	imgs := newFakeImageStore()

@@ -40,6 +40,7 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/admin/games/{code}/users/{userId}", s.deleteUser)
 			r.Get("/admin/games/{code}/users/{userId}/impersonate", s.impersonateUser)
 			r.Delete("/admin/games/{code}/questions/{questionId}", s.deleteQuestion)
+			r.Get("/admin/games/{code}/votes", s.adminVotes)
 		})
 
 		// Image upload / serving — no auth on the read path; UUID is the
@@ -58,6 +59,8 @@ func (s *Server) Routes() http.Handler {
 		r.Put("/games/{code}/questions", s.putQuestion)
 		r.Get("/games/{code}/leaderboard", s.leaderboard)
 		r.Get("/games/{code}/results", s.results)
+		r.Get("/games/{code}/myvote", s.myVote)
+		r.Post("/games/{code}/vote", s.castVote)
 		r.Post("/ai/suggest", s.aiSuggest)
 	})
 
