@@ -385,6 +385,9 @@ cmd_dev_start() {
     echo "building..."
     (cd "$BACKEND_DIR" && go build -o "/tmp/${DEV_APP_NAME}" ./cmd/server)
     echo "starting..."
+    # The binary resolves migrations relative to its cwd; pin to an absolute
+    # path so it works regardless of where oglimmer.sh is invoked from.
+    export MIGRATIONS_DIR="${MIGRATIONS_DIR:-$BACKEND_DIR/migrations}"
     nohup "/tmp/${DEV_APP_NAME}" > "$DEV_LOG_FILE" 2>&1 &
     echo $! > "$DEV_PID_FILE"
     echo "started (pid $!, log: $DEV_LOG_FILE)"
