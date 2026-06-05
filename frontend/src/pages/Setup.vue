@@ -8,7 +8,7 @@
       <div v-if="saved && !editing" key="waiting" class="card card--mint stack center card-stickered">
         <div style="font-size: 3rem; line-height: 1;">🎉</div>
         <h1>Locked in!</h1>
-        <p>Your question is ready. Sit tight — the host kicks things off in a moment.</p>
+        <p>{{ waitingMessage }}</p>
 
         <EmailCapture v-if="offerEmail" />
 
@@ -213,6 +213,7 @@ import { imageUrl } from '@/services/images'
 import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
 import { useSaveHint } from '@/composables/useSaveHint'
+import { formatScheduled } from '@/utils/schedule'
 import type { AnswerType, Question } from '@/types'
 
 const props = defineProps<{ code: string }>()
@@ -257,6 +258,27 @@ const withinThreshold = computed(() => {
   return startMs - serverNow <= WAIT_NOTICE_THRESHOLD_MS
 })
 const showWaitNotice = withinThreshold
+
+// The "Locked in!" line. Only promise an imminent start when the clock agrees:
+// with no scheduled time the host starts at will, when it's near we say "any
+// moment", further out we give the relative minutes or the actual start time so
+// players know whether to wait or come back later.
+const waitingMessage = computed(() => {
+  const sched = store.game?.scheduledAt
+  const startMs = sched ? new Date(sched).getTime() : NaN
+  if (!sched || isNaN(startMs)) {
+    return 'Your question is ready. Sit tight — the host kicks things off when everyone’s in.'
+  }
+  const diffMs = startMs - (nowMs.value + store.serverClockOffsetMs)
+  if (diffMs <= 2 * 60 * 1000) {
+    return 'Your question is ready. Sit tight — the game kicks off any moment now.'
+  }
+  const mins = Math.round(diffMs / 60_000)
+  if (mins < 60) {
+    return `Your question is ready. The game kicks off in about ${mins} minute${mins === 1 ? '' : 's'}.`
+  }
+  return `Your question is ready. The game kicks off at ${formatScheduled(sched)}.`
+})
 
 // Email pitch only makes sense outside the threshold (player is going to walk
 // away) and only if they haven't already given one.
