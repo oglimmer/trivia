@@ -440,6 +440,83 @@ func TestLeaderboardHiddenUntilRevealed(t *testing.T) {
 	}
 }
 
+// ---------- public question list: correct-answer visibility ----------
+
+// TestListQuestionsPublicHidesOthersCorrectUntilFinished guards the fix from
+// b389b67: before the game is finished, the public question list must expose a
+// player's correct answer ONLY for their own question (so the editor can
+// rehydrate it). Everyone else's correct answer must be stripped, and an
+// anonymous caller must see none.
+func TestListQuestionsPublicHidesOthersCorrectUntilFinished(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
+	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
+
+	qA, _ := f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Alice's?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+	qB, _ := f.UpsertQuestion(context.TODO(), g.ID, bob.ID, "Bob's?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"no"`))
+
+	// Game still in setup. Alice asks for the list: she sees her own correct
+	// answer but not Bob's.
+	w := do(t, s, req{
+		method:   "GET",
+		path:     "/api/games/" + g.Code + "/questions",
+		playerTo: alice.Token,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	byID := map[string]db.Question{}
+	for _, q := range decode[[]db.Question](t, w) {
+		byID[q.ID] = q
+	}
+	if byID[qA.ID].Correct == nil {
+		t.Errorf("Alice should see the correct answer for her own question")
+	}
+	if byID[qB.ID].Correct != nil {
+		t.Errorf("Alice must NOT see Bob's correct answer before finish, got %s", byID[qB.ID].Correct)
+	}
+
+	// Anonymous caller (no player token) sees no correct answers at all.
+	w = do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/questions"})
+	for _, q := range decode[[]db.Question](t, w) {
+		if q.Correct != nil {
+			t.Errorf("anonymous caller leaked correct answer for %s: %s", q.ID, q.Correct)
+		}
+	}
+}
+
+// TestListQuestionsPublicExposesAllCorrectWhenFinished verifies that once the
+// game is finished every correct answer is exposed, even to an anonymous
+// caller (the results screen needs them).
+func TestListQuestionsPublicExposesAllCorrectWhenFinished(t *testing.T) {
+	s, f := testServer(t)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
+	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Alice's?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
+	_, _ = f.UpsertQuestion(context.TODO(), g.ID, bob.ID, "Bob's?", nil, "yesno",
+		json.RawMessage(`[]`), json.RawMessage(`"no"`))
+	_ = f.SetGameState(context.TODO(), g.ID, "finished")
+
+	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/questions"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	qs := decode[[]db.Question](t, w)
+	if len(qs) != 2 {
+		t.Fatalf("want 2 questions, got %d", len(qs))
+	}
+	for _, q := range qs {
+		if q.Correct == nil {
+			t.Errorf("finished game must expose correct answer for %s", q.ID)
+		}
+	}
+}
+
 // ---------- game state transitions ----------
 
 func TestSetGameStateRejectsBad(t *testing.T) {
