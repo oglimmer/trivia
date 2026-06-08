@@ -346,6 +346,11 @@ function hydrateFromQuestion(q: Question) {
   if (q.answerType === 'choice') {
     options.value = Array.isArray(q.options) && q.options.length ? q.options : ['', '']
   }
+  if (q.correct != null) {
+    if (q.answerType === 'yesno') correct.value = q.correct === 'no' ? 'no' : 'yes'
+    else if (q.answerType === 'choice') correctIdx.value = Number(q.correct) || 0
+    else if (q.answerType === 'number') correctNumber.value = Number(q.correct)
+  }
   saved.value = true
 }
 

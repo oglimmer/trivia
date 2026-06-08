@@ -185,12 +185,24 @@ func (s *Server) listQuestionsPublic(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		return
 	}
-	// Only return correct answers if game is finished. Otherwise strip.
-	includeCorrect := g.State == "finished"
-	qs, err := s.DB.ListQuestions(r.Context(), g.ID, includeCorrect)
+	qs, err := s.DB.ListQuestions(r.Context(), g.ID, true)
 	if err != nil {
 		serverError(w, r, err)
 		return
+	}
+	// Only expose correct answers once the game is finished. Before then,
+	// players may still see the correct answer for their OWN question (so the
+	// editor can restore it); everyone else's is stripped.
+	if g.State != "finished" {
+		var meID string
+		if u, err := s.playerFromHeader(r); err == nil {
+			meID = u.ID
+		}
+		for i := range qs {
+			if qs[i].UserID != meID {
+				qs[i].Correct = nil
+			}
+		}
 	}
 	writeJSON(w, 200, qs)
 }
