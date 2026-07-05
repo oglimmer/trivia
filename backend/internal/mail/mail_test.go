@@ -11,8 +11,8 @@ func TestBuildLoginBodyGreeting(t *testing.T) {
 		playerName       string
 		expectedGreeting string
 	}{
-		{name: "empty name", playerName: "", expectedGreeting: "Hey"},
-		{name: "named player", playerName: "Alice", expectedGreeting: "Hey Alice"},
+		{name: "empty name", playerName: "", expectedGreeting: "Hi"},
+		{name: "named player", playerName: "Alice", expectedGreeting: "Hi Alice"},
 	}
 
 	for _, tt := range tests {
@@ -22,8 +22,8 @@ func TestBuildLoginBodyGreeting(t *testing.T) {
 			if !strings.Contains(body, tt.expectedGreeting) {
 				t.Errorf("expected greeting %q in body, got:\n%s", tt.expectedGreeting, body)
 			}
-			if strings.Contains(body, "Hi") {
-				t.Errorf("body should NOT contain formal 'Hi' greeting, got:\n%s", body)
+			if strings.Contains(body, "Hey") {
+				t.Errorf("body should NOT contain casual 'Hey' greeting, got:\n%s", body)
 			}
 		})
 	}
