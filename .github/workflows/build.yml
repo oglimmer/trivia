@@ -1,7 +1,7 @@
 name: Build & push images
 
 # Builds the changed component images (backend / frontend) and pushes them to
-# registry.oglimmer.com via the repo's oglimmer.sh, on the in-cluster
+# ghcr.io/oglimmer via the repo's oglimmer.sh, on the in-cluster
 # self-hosted ARC runner (arm64, Docker-in-Docker). Only the components whose
 # files changed are built (mirrors ci.yml). The runner has no kubectl, so
 # oglimmer.sh triggers the rollout via the restart hook (restart.oglimmer.com)
@@ -19,6 +19,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   # Detect which parts of the repo changed so we only build the relevant images.
@@ -49,12 +50,12 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Log in to registry.oglimmer.com
+      - name: Log in to ghcr.io
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
-          registry: registry.oglimmer.com
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # --platform auto -> plain `docker build` + `docker push` via the dind
       # daemon (native arm64). Avoids the buildx docker-container driver, whose
@@ -73,12 +74,12 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Log in to registry.oglimmer.com
+      - name: Log in to ghcr.io
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
-          registry: registry.oglimmer.com
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build, push & restart frontend
         env:

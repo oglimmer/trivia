@@ -184,7 +184,7 @@ kubectl create secret generic trivia-secret \
 helm install trivia ./helm/trivia
 ```
 
-Key `values.yaml` knobs: `publicBaseURL`, `anthropic.model`, `backend.image` / `frontend.image` (default `registry.oglimmer.com/trivia-{backend,frontend}:latest`), `postgres.enabled` (toggle off to point at `externalPostgres.host` instead), `postgres.image.tag` (pinned at `16-alpine`; bumping it is a major Postgres upgrade — see the comment in `values.yaml` and don't do it without a dump/restore plan), `ingress.hosts` / `ingress.tls`. The default cert-manager issuer is `oglimmer-com-dns` (DNS-01); change `ingress.annotations.cert-manager.io/cluster-issuer` and `ingress.tls[].secretName` for your own setup. See `helm/trivia/README.md` for more.
+Key `values.yaml` knobs: `publicBaseURL`, `anthropic.model`, `backend.image` / `frontend.image` (default `ghcr.io/oglimmer/trivia-{backend,frontend}:latest`), `postgres.enabled` (toggle off to point at `externalPostgres.host` instead), `postgres.image.tag` (pinned at `16-alpine`; bumping it is a major Postgres upgrade — see the comment in `values.yaml` and don't do it without a dump/restore plan), `ingress.hosts` / `ingress.tls`. The default cert-manager issuer is `oglimmer-com-dns` (DNS-01); change `ingress.annotations.cert-manager.io/cluster-issuer` and `ingress.tls[].secretName` for your own setup. See `helm/trivia/README.md` for more.
 
 #### Enabling SMTP
 

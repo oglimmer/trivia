@@ -34,7 +34,7 @@ smtp:
 backend:
   name: api
   image:
-    repository: registry.oglimmer.com/trivia-backend
+    repository: ghcr.io/oglimmer/trivia-backend
     pullPolicy: Always
     tag: "latest"
 
@@ -54,7 +54,7 @@ backend:
 frontend:
   name: web
   image:
-    repository: registry.oglimmer.com/trivia-frontend
+    repository: ghcr.io/oglimmer/trivia-frontend
     pullPolicy: Always
     tag: "latest"
 
@@ -174,7 +174,8 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Image pull secrets. Cluster-wide pull secret for registry.oglimmer.com,
-# pre-created in the namespace (matches the dsa convention).
-imagePullSecrets:
-  - name: oglimmerregistrykey
+# Image pull secrets. ghcr.io/oglimmer/trivia-{backend,frontend} are public,
+# so no pull secret is needed by default. If the GHCR namespace becomes
+# private, create a docker-registry secret and reference it here — see
+# helm/trivia/README.md.
+imagePullSecrets: []

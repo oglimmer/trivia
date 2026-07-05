@@ -7,7 +7,7 @@ SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Default configuration
-DEFAULT_REGISTRIES=("registry.oglimmer.com")
+DEFAULT_REGISTRIES=("ghcr.io/oglimmer")
 DEFAULT_FRONTEND_DEPLOYMENT="trivia-frontend"
 DEFAULT_BACKEND_DEPLOYMENT="trivia-backend"
 
