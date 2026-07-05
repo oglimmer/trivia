@@ -96,9 +96,9 @@ func (m *Mailer) SendLoginLink(to, playerName, gameName, gameCode, playerToken s
 }
 
 func buildLoginBody(playerName, gameName, gameCode, url string) string {
-	greet := "Hi"
+	greet := "Hey"
 	if playerName != "" {
-		greet = "Hi " + playerName
+		greet = "Hey " + playerName
 	}
 	game := gameCode
 	if gameName != "" {
