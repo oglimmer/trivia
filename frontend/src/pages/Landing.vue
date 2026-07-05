@@ -1,5 +1,11 @@
 <template>
   <main class="stack-lg" style="padding-top: 12px;">
+    <!-- English‑only notice -->
+    <div class="lang-notice" role="alert">
+      <span class="lang-notice__flag" aria-hidden="true">🌐</span>
+      <span>This platform is available in English only.</span>
+    </div>
+
     <section class="hero">
       <span class="hero__sparkle s1" aria-hidden="true">✦</span>
       <span class="hero__sparkle s2" aria-hidden="true">✦</span>
@@ -84,3 +90,30 @@ async function join() {
   }
 }
 </script>
+
+<style scoped>
+.lang-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--pink-2);
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  font-weight: 700;
+  color: var(--ink);
+  transform: rotate(-1deg);
+  animation: lang-fancy 3s ease-in-out infinite alternate;
+}
+
+.lang-notice__flag {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+@keyframes lang-fancy {
+  0% { transform: rotate(-1deg); }
+  100% { transform: rotate(1deg); }
+}
+</style>
