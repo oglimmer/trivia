@@ -846,6 +846,35 @@ label {
 .hero__sparkle.s1 { top: 14px; left: 18px; font-size: 1.6rem; transform: rotate(-10deg); }
 .hero__sparkle.s2 { bottom: 12px; right: 22px; font-size: 1.4rem; transform: rotate(14deg); }
 .hero__sparkle.s3 { top: 22%; right: 14px; font-size: 1rem; }
+.english-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper);
+  border: var(--bw) solid var(--ink);
+  border-radius: 999px;
+  padding: 6px 16px;
+  box-shadow: var(--shadow-1);
+  animation: english-pulse 2s ease-in-out infinite alternate;
+  margin-bottom: 14px;
+}
+.english-badge__flag {
+  font-size: 1.4rem;
+}
+.english-badge__text {
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+@keyframes english-pulse {
+  0% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.05) rotate(-1deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .english-badge { animation: none; }
+}
 
 /* ---------- Question card emphasis ---------- */
 .q-card {

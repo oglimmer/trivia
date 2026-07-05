@@ -6,6 +6,10 @@
       <span class="hero__sparkle s3" aria-hidden="true">★</span>
 
       <span class="hero__eyebrow">Bring-your-own-question</span>
+      <div class="english-badge" role="note" aria-label="Language notice">
+        <span class="english-badge__flag">🇬🇧</span>
+        <span class="english-badge__text">Available only in English</span>
+      </div>
       <h1 class="hero__title">Game <em>night</em>,<br />made by you.</h1>
       <p class="hero__subtitle">Type the code your host shared.</p>
     </section>
