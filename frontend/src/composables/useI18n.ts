@@ -11,6 +11,7 @@ const messages: Record<string, Record<string, string>> = {
     loadingButton: "Looking up…",
     hosting: "Hosting?",
     openAdmin: "Open admin →",
+    errorGameNotFound: "No game with that code",
   },
   de: {
     heroEyebrow: "Bring-deine-eigene-Frage",
@@ -24,6 +25,7 @@ const messages: Record<string, Record<string, string>> = {
     loadingButton: "Suche…",
     hosting: "Host?",
     openAdmin: "Admin öffnen →",
+    errorGameNotFound: "Kein Spiel mit diesem Code",
   },
   fr: {
     heroEyebrow: "Apportez-votre-propre-question",
@@ -37,11 +39,12 @@ const messages: Record<string, Record<string, string>> = {
     loadingButton: "Recherche…",
     hosting: "Héberger ?",
     openAdmin: "Ouvrir admin →",
+    errorGameNotFound: "Aucun jeu avec ce code",
   },
 }
 
 function getLocale(): string {
-  const lang = (navigator.language || 'en').split('-')[0]
+  const lang = (navigator.language || 'en').split('-')[0].toLowerCase()
   return ['en', 'de', 'fr'].includes(lang) ? lang : 'en'
 }
 

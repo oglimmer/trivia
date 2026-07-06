@@ -80,7 +80,7 @@ async function join() {
       router.push(`/g/${c}/join`)
     }
   } catch (e) {
-    err.value = errMsg(e, 'No game with that code')
+    err.value = errMsg(e, t('errorGameNotFound'))
   } finally {
     loading.value = false
   }
