@@ -1,7 +1,9 @@
 const messages: Record<string, Record<string, string>> = {
   en: {
     heroEyebrow: "Bring-your-own-question",
-    heroMotto: "Game <em>night</em>,<br />made by you.",
+    heroMottoPrefix: "Game ",
+    heroMottoEm: "night",
+    heroMottoSuffix: "made by you.",
     heroSubtitle: "Type the code your host shared.",
     gameCodeLabel: "Game code",
     gameCodePlaceholder: "abcd",
@@ -12,7 +14,9 @@ const messages: Record<string, Record<string, string>> = {
   },
   de: {
     heroEyebrow: "Bring-deine-eigene-Frage",
-    heroMotto: "Spiel <em>Nacht</em>,<br />gemacht von dir.",
+    heroMottoPrefix: "Spiel ",
+    heroMottoEm: "Nacht",
+    heroMottoSuffix: "gemacht von dir.",
     heroSubtitle: "Gib den Code ein, den dein Gastgeber geteilt hat.",
     gameCodeLabel: "Spielcode",
     gameCodePlaceholder: "abcd",
@@ -23,7 +27,9 @@ const messages: Record<string, Record<string, string>> = {
   },
   fr: {
     heroEyebrow: "Apportez-votre-propre-question",
-    heroMotto: "Soirée <em>jeux</em>,<br />faite par vous.",
+    heroMottoPrefix: "Soirée ",
+    heroMottoEm: "jeux",
+    heroMottoSuffix: "faite par vous.",
     heroSubtitle: "Tapez le code partagé par votre hôte.",
     gameCodeLabel: "Code du jeu",
     gameCodePlaceholder: "abcd",

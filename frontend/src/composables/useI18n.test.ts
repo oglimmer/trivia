@@ -27,10 +27,25 @@ describe('useI18n', () => {
     expect(t('heroEyebrow')).toBe('Bring-your-own-question')
   })
 
-  it('returns German when browser language is de', () => {
+  it('composes the hero motto HTML correctly for English', () => {
+    (navigator as any).language = 'en'
+    const { t } = useI18n()
+    const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
+    expect(full).toBe('Game <em>night</em>,<br />made by you.')
+  })
+
+  it('composes the hero motto HTML correctly for German', () => {
     (navigator as any).language = 'de'
     const { t } = useI18n()
-    expect(t('heroMotto')).toBe('Spiel <em>Nacht</em>,<br />gemacht von dir.')
+    const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
+    expect(full).toBe('Spiel <em>Nacht</em>,<br />gemacht von dir.')
+  })
+
+  it('composes the hero motto HTML correctly for French', () => {
+    (navigator as any).language = 'fr'
+    const { t } = useI18n()
+    const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
+    expect(full).toBe('Soirée <em>jeux</em>,<br />faite par vous.')
   })
 
   it('returns French when browser language is fr', () => {

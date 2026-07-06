@@ -6,7 +6,7 @@
       <span class="hero__sparkle s3" aria-hidden="true">★</span>
 
       <span class="hero__eyebrow">{{ t('heroEyebrow') }}</span>
-      <h1 class="hero__title" v-html="t('heroMotto')"></h1>
+      <h1 class="hero__title">{{ t('heroMottoPrefix') }}<em>{{ t('heroMottoEm') }}</em>,<br>{{ t('heroMottoSuffix') }}</h1>
       <p class="hero__subtitle">{{ t('heroSubtitle') }}</p>
     </section>
 
