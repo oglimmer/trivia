@@ -109,7 +109,7 @@ COMMANDS:
     stop                Stop the local backend process
     status              Show whether the local backend is running
     logs                Tail the local backend log file
-    test                Run backend tests
+    test                Run backend and frontend tests
 
 BUILD OPTIONS:
     -f, --frontend          Build and deploy frontend only
@@ -445,8 +445,48 @@ cmd_dev_logs() {
 }
 
 cmd_dev_test() {
+    # Runs both backend and frontend test suites. Designed to work on a fresh
+    # clone and non-interactively (e.g. when invoked from a backend process /
+    # CI), so it installs frontend dependencies itself and never prompts.
+
+    # --- Backend ---
+    if ! command -v go >/dev/null 2>&1; then
+        log_error "Go is not installed but is required to run backend tests"
+        exit 1
+    fi
     log_info "Running backend tests..."
-    (cd "$BACKEND_DIR" && go test ./...)
+    # go test resolves and downloads modules on demand, so this works on a
+    # fresh clone with no extra setup.
+    if ! (cd "$BACKEND_DIR" && go test ./...); then
+        log_error "Backend tests failed"
+        exit 1
+    fi
+    log_success "Backend tests passed"
+
+    # --- Frontend ---
+    if ! command -v npm >/dev/null 2>&1; then
+        log_error "npm is not installed but is required to run frontend tests"
+        exit 1
+    fi
+    # On a fresh clone node_modules is absent; install deps reproducibly and
+    # non-interactively from the lockfile before running the suite.
+    if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+        log_info "Installing frontend dependencies (npm ci)..."
+        if ! (cd "$FRONTEND_DIR" && npm ci); then
+            log_error "Failed to install frontend dependencies"
+            exit 1
+        fi
+    fi
+    log_info "Running frontend tests..."
+    # vitest defaults to watch mode; the "test" script uses "vitest run" for a
+    # single non-interactive pass. CI=true keeps any tooling from prompting.
+    if ! (cd "$FRONTEND_DIR" && CI=true npm test); then
+        log_error "Frontend tests failed"
+        exit 1
+    fi
+    log_success "Frontend tests passed"
+
+    log_success "All tests passed"
 }
 
 execute_dev_command() {
