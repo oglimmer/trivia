@@ -73,8 +73,9 @@ frontend:
 # Bundled Postgres (single-replica, PVC-backed). Set enabled=false to use an
 # external database — then provide host/user/db here and put the password in
 # the sealed secret under POSTGRES_PASSWORD.
+# Migrated to the central shared PostgreSQL — see externalPostgres below.
 postgres:
-  enabled: true
+  enabled: false
   image:
     repository: postgres
     tag: "16-alpine"
@@ -99,10 +100,10 @@ postgres:
 # External Postgres (only consulted when postgres.enabled=false).
 # Password is read from the sealed secret's POSTGRES_PASSWORD key.
 externalPostgres:
-  host: ""
+  host: "postgres"
   port: 5432
-  user: trivia
-  database: trivia
+  user: "trivia-app"
+  database: "trivia_prod"
 
 # Ingress configuration. Traefik 3 + cert-manager, matching the
 # oglimmer.com DNS-01 cluster issuer. Path order matters — backend paths
