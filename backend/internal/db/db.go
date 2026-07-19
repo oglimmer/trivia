@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -28,6 +29,18 @@ func Connect(ctx context.Context) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Keep the pool usable behind a transaction-mode PgBouncer, which forbids
+	// server-side named prepared statements. QueryExecModeExec pipelines
+	// Parse+Bind+Describe+Execute+Sync into one message group, so the exchange
+	// completes inside a single pooler-owned transaction and the server can
+	// never be swapped between a Parse and its Bind. The caches are disabled
+	// for the same reason. All three are inert on a direct connection, so this
+	// is the only configuration — there is no per-environment variant.
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+	cfg.ConnConfig.StatementCacheCapacity = 0
+	cfg.ConnConfig.DescriptionCacheCapacity = 0
+
 	cfg.MaxConns = 25
 	cfg.MinConns = 5
 	cfg.MaxConnLifetime = 30 * time.Minute
