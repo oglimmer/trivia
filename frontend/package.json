@@ -1,6 +1,6 @@
 {
   "name": "trivia-frontend",
-  "version": "0.1.18",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
