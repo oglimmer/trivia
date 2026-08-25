@@ -19,6 +19,7 @@
         <li>Two variants (<code>thumb</code> ≤ 128 px, <code>medium</code> ≤ 640 px) are pre-rendered at write time, in the same transaction as the original.</li>
         <li>Reads are unauthenticated — possession of the UUID <em>is</em> the capability.</li>
         <li>A background sweep deletes orphans (images no user or question references) after a 1-hour grace period.</li>
+        <li>Only classic games use question photos. A Company Consensus set is text-only, so a poll game touches this subsystem exactly once — for player avatars.</li>
       </ul>
     </section>
 

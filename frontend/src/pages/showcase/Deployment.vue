@@ -273,7 +273,11 @@ securityContext:
           <code>OnJoin</code>/<code>OnLeave</code> callbacks; plus
           <code>trivia_ws_session_duration_seconds</code> histogram (by role)
           observing each session's lifetime when the upgraded connection
-          closes.
+          closes. The role label has three values —
+          <code>player</code>, <code>admin</code>, <code>board</code> — and it
+          is worth splitting on before reading the histogram: a projector
+          stays connected for the whole evening, so board sessions sit in the
+          long tail by design, not by fault.
         </li>
         <li>
           <strong>Game lifecycle</strong> —

@@ -8,7 +8,7 @@
       <p class="hero__subtitle">
         Admins use an HMAC JWT; players use an opaque hex token. Plus the
         magic-link rejoin email that gets a player back into a game from any
-        device.
+        device — and one view that deliberately carries no credential at all.
       </p>
     </section>
 
@@ -33,6 +33,10 @@
         <li>
           <strong>Magic link</strong> — same player token, delivered by email,
           consumed by the <code>/impersonate</code> SPA route.
+        </li>
+        <li>
+          <strong>Board</strong> — the projector view carries
+          <em>no</em> credential. See below.
         </li>
       </ul>
     </section>
@@ -179,6 +183,39 @@ func (s *Server) sendLoginLink(email, playerName, gameName, gameCode, token stri
       <p>
         When SMTP is disabled (the default in dev), the mailer logs the URL to
         stdout — so manual rejoin flows still work without standing up a relay.
+      </p>
+    </section>
+
+    <section class="card stack legal-prose api-prose">
+      <h2>The third case: no credential at all</h2>
+      <p>
+        The projector board at <code>/g/{code}/board</code> is the one surface
+        that authenticates nothing. It opens a WebSocket as
+        <code>?role=board&amp;code=&lt;gameCode&gt;</code>, and anyone who knows
+        the game code can open it.
+      </p>
+      <p>
+        The reasoning is about what a credential would protect. A board is a TV
+        in a room where the game is already being played out loud — everything
+        on it is visible to everyone present by design. Issuing it a token
+        would mean storing a secret on a machine anybody in the room can walk
+        up to, in exchange for guarding information the room already has.
+      </p>
+      <p>
+        What it does <em>not</em> get is the admin view. The board is served the
+        player-facing envelope, so Company Consensus option points stay hidden
+        until the host reveals them. It also carries an empty
+        <code>UserID</code>, which is what keeps it out of presence counts and
+        makes the answer handler ignore anything it sends:
+      </p>
+      <pre class="api-code">// backend/internal/api/ws.go
+if c.Role != ws.RolePlayer {
+    return // only players can answer
+}</pre>
+      <p>
+        So the credential model is still two schemes, plus one role defined
+        entirely by what it cannot do. Read-only by construction beats
+        read-only by permission check.
       </p>
     </section>
 

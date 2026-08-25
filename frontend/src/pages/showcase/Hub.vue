@@ -57,8 +57,9 @@
         <span class="showcase-card__eyebrow">04 · Real-time</span>
         <h2 class="showcase-card__title">WebSocket &amp; live state</h2>
         <p class="showcase-card__lead">
-          One hub, two roles, six envelopes. How players reconnect mid-question
-          without losing their answer.
+          One hub, three roles, no fan-out bus. How players reconnect
+          mid-question without losing their answer, and why the projector
+          board needs no credential.
         </p>
         <span class="showcase-card__tag">hub · presence · ack replay</span>
       </RouterLink>
@@ -67,8 +68,9 @@
         <span class="showcase-card__eyebrow">05 · Game</span>
         <h2 class="showcase-card__title">Scoring algorithm</h2>
         <p class="showcase-card__lead">
-          Base points by difficulty, a linearly-decaying time bonus, and the
-          field-wide ranking that powers number questions.
+          Base points by difficulty, a linearly-decaying time bonus, the
+          field-wide ranking behind number questions, and the poll format
+          where every answer scores.
         </p>
         <span class="showcase-card__tag">points · time bonus · ranking</span>
       </RouterLink>

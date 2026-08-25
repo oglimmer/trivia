@@ -21,6 +21,7 @@
         <li>The <code>web_search_20260209</code> server tool is enabled (capped at 3 uses) so the model can verify obscure facts before committing them — and the API auto-injects code-execution server-side for dynamic result filtering.</li>
         <li>The parser walks content blocks in reverse to find the last text block containing JSON, since tool use produces interleaved <code>server_tool_use</code> / <code>web_search_tool_result</code> blocks; within that block it extracts the first <code>{…}</code> so wrapping prose is tolerated.</li>
         <li>For <code>choice</code> answers the option order is shuffled <em>and</em> the correct index rewritten, so the model's bias toward option <code>0</code> doesn't tip off the player.</li>
+        <li>Classic games only. Company Consensus questions come from a real survey of real colleagues — a drafted one would have no true answer to be popular.</li>
       </ul>
     </section>
 

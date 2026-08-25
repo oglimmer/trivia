@@ -24,6 +24,31 @@
         <code>{"error": "message"}</code>.
       </p>
 
+      <h2>Game modes</h2>
+      <p>
+        A game is created in one of two modes, and the mode decides who writes
+        the questions and how they score. It is fixed at creation and reported
+        as <code>mode</code> on every <code>Game</code> payload.
+      </p>
+      <ul>
+        <li>
+          <code>classic</code> — each player writes one question with a photo
+          during <code>setup</code>. Every question has one correct answer.
+          This is the default when <code>mode</code> is omitted.
+        </li>
+        <li>
+          <code>poll</code> — Company Consensus. The host authors the whole
+          set up front from survey results, players join as teams, and every
+          option scores by how many survey respondents gave it. Question
+          order is played as uploaded rather than shuffled.
+        </li>
+      </ul>
+      <p>
+        Endpoints that only apply to one mode say so. Calling a
+        <code>poll</code>-only endpoint on a classic game returns
+        <code>400</code>, and vice versa.
+      </p>
+
       <h2>Authentication</h2>
       <p>The API has two independent credential types:</p>
       <ul>
@@ -109,7 +134,9 @@
     "id": "uuid",
     "code": "abcd",
     "name": "Game night",
+    "mode": "classic",
     "state": "setup",
+    "hideLeaderboardTail": true,
     "currentQuestionId": null,
     "questionState": "idle",
     "questionStartedAt": null,
@@ -132,9 +159,16 @@
   "code": "abcd",                       // optional
   "name": "Game night",
   "questionTimeoutSeconds": 30,         // optional
-  "scheduledAt": "2026-05-20T19:00:00Z" // optional, RFC3339
+  "scheduledAt": "2026-05-20T19:00:00Z", // optional, RFC3339
+  "mode": "classic" | "poll"            // optional, defaults to "classic"
 }</pre>
-        <p>Returns the created <code>Game</code> object.</p>
+        <p>
+          Returns the created <code>Game</code> object. Any other
+          <code>mode</code> value is rejected with <code>400</code>. A
+          <code>poll</code> game is created with
+          <code>hideLeaderboardTail</code> off so the TV board can show
+          standings all the way through; classic games keep it on.
+        </p>
       </article>
 
       <article class="api-ep">
@@ -186,11 +220,17 @@
           <span class="api-method api-method--put">PUT</span>
           <code class="api-path">/api/admin/games/{code}/settings</code>
         </header>
-        <p>Editable only in <code>setup</code>. Both fields are optional; <code>scheduledAt</code> may be sent as explicit <code>null</code> to clear.</p>
+        <p>Editable only in <code>setup</code>. Every field is optional; <code>scheduledAt</code> may be sent as explicit <code>null</code> to clear.</p>
         <pre class="api-code">{
   "questionTimeoutSeconds": 45,
-  "scheduledAt": "2026-05-20T19:00:00Z"
+  "scheduledAt": "2026-05-20T19:00:00Z",
+  "hideLeaderboardTail": true
 }</pre>
+        <p>
+          <code>hideLeaderboardTail</code> hides everything below the top few
+          places until the final reveal. It is on by default, and off for
+          <code>poll</code> games, where a live board is the point.
+        </p>
       </article>
 
       <article class="api-ep">
@@ -254,6 +294,85 @@
           <code class="api-path">/api/admin/games/{code}/questions/{questionId}</code>
         </header>
         <p>Remove a question. Only allowed in <code>setup</code>.</p>
+      </article>
+
+      <h3>Authoring a Company Consensus set</h3>
+      <p>
+        The next four endpoints are <strong>poll-only</strong> and
+        <strong>setup-only</strong>. In a classic game the questions belong to
+        the players who wrote them, and once teams are playing, changing the
+        set would orphan their answers — both cases return <code>400</code>.
+      </p>
+      <p>
+        They all take the same question shape: a text plus exactly five
+        answers, each with the number of survey respondents who gave it.
+        Options are stored shuffled, so the highest-scoring answer never sits
+        in a predictable slot. The admin views always redisplay them ranked by
+        points, which is how survey results arrive; the stored order is never
+        surfaced.
+      </p>
+      <pre class="api-code">{
+  "text": "What keeps this office running?",
+  "answers": [
+    { "text": "Coffee",        "points": 41 },
+    { "text": "Tea",           "points": 27 },
+    { "text": "Energy drinks", "points": 12 },
+    { "text": "Tap water",     "points": 9  },
+    { "text": "Sheer spite",   "points": 5  }
+  ]
+}</pre>
+      <p>
+        Answer text must be non-empty and unique within the question, and
+        points must not be negative.
+      </p>
+
+      <article class="api-ep">
+        <header class="api-ep__hdr">
+          <span class="api-method api-method--post">POST</span>
+          <code class="api-path">/api/admin/games/{code}/questions</code>
+        </header>
+        <p>Append one question to the set. Returns the created <code>Question</code>.</p>
+      </article>
+
+      <article class="api-ep">
+        <header class="api-ep__hdr">
+          <span class="api-method api-method--put">PUT</span>
+          <code class="api-path">/api/admin/games/{code}/questions/{questionId}</code>
+        </header>
+        <p>
+          Replace one question, keeping its slot in the running order. Returns
+          the updated <code>Question</code>, or <code>404</code> if the id does
+          not belong to this game.
+        </p>
+      </article>
+
+      <article class="api-ep">
+        <header class="api-ep__hdr">
+          <span class="api-method api-method--post">POST</span>
+          <code class="api-path">/api/admin/games/{code}/questions/{questionId}/move</code>
+        </header>
+        <p>
+          Shift a question one slot in the running order. Poll sets are played
+          in the order the host arranged them, so this is how the warm-up gets
+          to the front. Responds <code>204</code> with no body.
+        </p>
+        <pre class="api-code">{ "direction": "up" | "down" }</pre>
+      </article>
+
+      <article class="api-ep">
+        <header class="api-ep__hdr">
+          <span class="api-method api-method--post">POST</span>
+          <code class="api-path">/api/admin/games/{code}/questions/import</code>
+        </header>
+        <p>
+          Replace the entire set from one payload — the bulk path behind the
+          console's "Bulk import from JSON". Maximum 50 questions; the whole
+          payload is validated before anything is written, so a bad entry
+          leaves the existing set untouched.
+        </p>
+        <pre class="api-code">{ "questions": [ { "text": "...", "answers": [ ... ] } ] }</pre>
+        <p><strong>200 response:</strong></p>
+        <pre class="api-code">{ "imported": 12, "questions": [ ... ] }</pre>
       </article>
     </section>
 
@@ -332,7 +451,14 @@
           <span class="api-method api-method--get">GET</span>
           <code class="api-path">/api/games/{code}/questions</code>
         </header>
-        <p>List the game's questions. The <code>correct</code> field is included only when the game state is <code>finished</code>.</p>
+        <p>
+          List the game's questions. The <code>correct</code> field is
+          included only when the game state is <code>finished</code>. For
+          <code>poll</code> questions the per-option <code>points</code> are
+          stripped under the same rule — the survey counts <em>are</em> the
+          answer, so shipping them early would hand every team a perfect
+          score.
+        </p>
       </article>
 
       <article class="api-ep">
@@ -341,7 +467,11 @@
           <code class="api-path">/api/games/{code}/questions</code>
           <span class="api-pill">auth</span>
         </header>
-        <p>Create or update the calling player's question. Only allowed in <code>setup</code>.</p>
+        <p>
+          Create or update the calling player's question. Only allowed in
+          <code>setup</code>, and only in <code>classic</code> games — in a
+          poll game the host owns the whole set.
+        </p>
         <pre class="api-code">{
   "text": "Which year was the Eiffel Tower completed?",
   "photoImageId": "uuid",         // required
@@ -441,7 +571,17 @@
 GET /ws?token=&lt;playerToken&gt;
 
 // Admin:
-GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
+GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;
+
+// Board (the projector view at /g/{code}/board):
+GET /ws?role=board&amp;code=&lt;gameCode&gt;</pre>
+      <p>
+        A board connection carries <strong>no token</strong>: a TV in the room
+        is not a participant, so it gets no player identity and can only
+        listen. It receives the player-facing view, which means poll option
+        points stay hidden until the reveal — nobody is holding the screen, but
+        everybody can see it.
+      </p>
 
       <h3>Inbound (client → server)</h3>
       <p>JSON envelopes shaped as <code>{ "type": ..., "data": ... }</code>.</p>
@@ -450,7 +590,7 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
           <code>answer</code> — submit an answer. Player role only.
           <pre class="api-code">{
   "type": "answer",
-  "data": { "questionId": "uuid", "value": &lt;yesno | choice index | number&gt; }
+  "data": { "questionId": "uuid", "value": &lt;yesno | choice/poll index | number&gt; }
 }</pre>
           Answers are silently dropped if the question is no longer active,
           if the player already answered, or if the response exceeded the
@@ -491,8 +631,17 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
   "data": { "questionId": "uuid", "responseMs": 1234 } }</pre>
         </li>
         <li>
-          <code>playerAnswered</code> — admin-only notification of any
-          player's submission (no value, just metadata).
+          <code>playerAnswered</code> — notification that a player submitted
+          (no value, just metadata). Sent to admins and to boards, which use it
+          to light up each team's name as it locks in.
+        </li>
+        <li>
+          <code>answeredSnapshot</code> — board-only, sent once on connect.
+          Lists who has already answered the active question, so a TV that
+          refreshes mid-question comes back with the right names lit instead of
+          a blank row.
+          <pre class="api-code">{ "type": "answeredSnapshot",
+  "data": { "questionId": "uuid", "userIds": ["uuid", "..."] } }</pre>
         </li>
         <li>
           <code>gameDeleted</code> — admin deleted the game; the client
@@ -510,7 +659,9 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
   "id": "uuid",
   "code": "abcd",
   "name": "Game night",
+  "mode": "classic" | "poll",
   "state": "setup" | "game" | "finished",
+  "hideLeaderboardTail": true,
   "currentQuestionId": "uuid" | null,
   "questionState": "idle" | "active" | "revealed",
   "questionStartedAt": "RFC3339" | null,
@@ -536,14 +687,24 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
       <pre class="api-code">{
   "id":     "uuid",
   "gameId": "uuid",
-  "userId": "uuid",
+  "userId": "uuid" | null,  // null for host-authored "poll" questions
   "text":   "...",
   "photoImageId": "uuid" | null,
-  "answerType": "yesno" | "choice" | "number",
-  "options":    [...],      // strings for "choice", empty otherwise
+  "answerType": "yesno" | "choice" | "number" | "poll",
+  "options":    [...],      // see below; empty for "yesno" and "number"
   "correct":    &lt;any&gt;,  // only present when revealed/finished/admin
   "sortOrder":  0,
   "createdAt":  "RFC3339"
+}</pre>
+      <p>
+        <code>options</code> is an array of strings for <code>choice</code>.
+        For <code>poll</code> it is an array of <code>PollOption</code>, whose
+        <code>points</code> field is withheld until the same moment
+        <code>correct</code> is:
+      </p>
+      <pre class="api-code">{
+  "text":   "Coffee",
+  "points": 41        // omitted before reveal
 }</pre>
 
       <h3>Answer</h3>
@@ -568,21 +729,34 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
         <li><code>yesno</code> — <code>options</code> is ignored; <code>correct</code> is the string <code>"yes"</code> or <code>"no"</code>.</li>
         <li><code>choice</code> — <code>options</code> is 2–4 strings; <code>correct</code> is the 0-based index of the right option.</li>
         <li><code>number</code> — <code>options</code> is <code>[]</code>; <code>correct</code> is a JSON number. Player submissions are also JSON numbers.</li>
+        <li>
+          <code>poll</code> — <code>options</code> is exactly 5
+          <code>PollOption</code> entries; <code>correct</code> is
+          <code>null</code>, because no single answer is right. Submissions are
+          the 0-based index of the chosen option, same as <code>choice</code>.
+        </li>
       </ul>
 
       <h3>Base points</h3>
       <ul>
         <li>yes/no — <code>100</code></li>
-        <li>choice, 2 options — <code>100</code>; 3 options — <code>200</code>; 4 options — <code>300</code></li>
+        <li>choice, 2 options — <code>100</code>; 3 options — <code>200</code>; 4 options — <code>300</code>, plus <code>100</code> per option above 4</li>
         <li>number — <code>300</code></li>
+        <li>
+          poll — no fixed base. The chosen option's own <code>points</code>
+          value is the base, so every option scores and the crowd's favourite
+          pays most. An option worth <code>0</code> scores nothing.
+        </li>
       </ul>
 
       <h3>Time bonus</h3>
       <p>
-        Correct yes/no and choice answers earn an additional time bonus that
-        decays linearly from <code>base / 2</code> at <code>0 ms</code> to
-        <code>0</code> at <code>30 000 ms</code>. Answers that arrive after the
-        per-question timeout are rejected at the WebSocket layer.
+        Correct yes/no, choice and poll answers earn an additional time bonus
+        that decays linearly from <code>base / 2</code> at <code>0 ms</code> to
+        <code>0</code> at the game's own
+        <code>questionTimeoutSeconds</code> — so a 90 s question rewards speed
+        across the whole 90 s, not just the first 30. Answers that arrive after
+        that window are rejected at the WebSocket layer.
       </p>
 
       <h3>Number scoring</h3>

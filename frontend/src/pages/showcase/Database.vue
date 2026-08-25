@@ -88,8 +88,18 @@ func (d *DB) Migrate(ctx context.Context, dir string) error {
         <li><code>0006_user_last_seen.sql</code> — drives the idle-prune sweep.</li>
         <li><code>0007_images.sql</code> — images + variants tables; FKs from users/questions.</li>
         <li><code>0008_drop_photo_b64.sql</code> — old inline-base64 column gone.</li>
+        <li><code>0009_poll_questions.sql</code> — Company Consensus: the <code>poll</code> answer type, <code>games.mode</code>, <code>games.hide_leaderboard_tail</code>.</li>
         <li><code>0009_user_name_unique_per_game.sql</code> — case-insensitive partial index.</li>
+        <li><code>0010_question_votes.sql</code> — one best-question vote per player per game.</li>
       </ul>
+      <p>
+        Note the two <code>0009</code> files: they landed on separate branches
+        and were both merged. Sorting is by full filename, so
+        <code>poll_questions</code> runs before
+        <code>user_name_unique_per_game</code> every time, and they touch
+        different tables — but the collision is a warning, not a pattern. Check
+        the highest number before naming a new one.
+      </p>
     </section>
 
     <section class="card stack legal-prose api-prose">
@@ -123,6 +133,24 @@ type Question struct {
         <code>float64</code> depending on the answer type — without any
         per-column polymorphism on the DB side.
       </p>
+      <p>
+        Adding the <code>poll</code> type is what this design was for. Its
+        <code>options</code> are objects rather than strings, and it has no
+        correct answer at all — so it stores the JSON literal
+        <code>null</code>, which satisfies the <code>NOT NULL</code> column
+        without inventing a sentinel:
+      </p>
+      <pre class="api-code">-- a poll question, as stored
+answer_type = 'poll'
+options     = '[{"text":"Tea","points":27},{"text":"Coffee","points":41}, ...]'
+correct     = 'null'</pre>
+      <p>
+        Migration <code>0009_poll_questions.sql</code> is correspondingly
+        small: widen the <code>answer_type</code> check constraint, add two
+        columns to <code>games</code>. No new table, no shape change to
+        <code>answers</code> — a poll submission is an option index, which is
+        the same thing a <code>choice</code> answer already stored.
+      </p>
     </section>
 
     <section class="card stack legal-prose api-prose">
@@ -141,9 +169,17 @@ images       ──┬─→ users.photo_image_id     (ON DELETE SET NULL)
 image_variants ─→ images       (ON DELETE CASCADE)</pre>
       <p>
         Deleting a game wipes the whole subtree in one statement. Removing a
-        single player keeps their question on the board (orphaned, admin can
+        single player keeps their question in the set (orphaned, admin can
         decide whether to delete it). Deleting an image never cascades into a
         user or question — see <RouterLink to="/developers-showcase/images">images showcase</RouterLink>.
+      </p>
+      <p>
+        <code>questions.user_id</code> being nullable turned out to carry a
+        second meaning. It was added so an author could be removed without
+        taking their question with them; Company Consensus questions are born
+        with it <code>NULL</code>, because the host wrote them and no player
+        owns them. That single field is what the admin editor checks before
+        allowing an edit — a question with an author belongs to that author.
       </p>
     </section>
 

@@ -4,11 +4,11 @@
       <span class="hero__sparkle s1" aria-hidden="true">✦</span>
       <span class="hero__sparkle s2" aria-hidden="true">★</span>
       <span class="hero__eyebrow">Showcase · 04</span>
-      <h1 class="hero__title">Real-time /<br /><em>one hub, six envelopes</em></h1>
+      <h1 class="hero__title">Real-time /<br /><em>one hub, three roles</em></h1>
       <p class="hero__subtitle">
         Live game state is pushed over one WebSocket endpoint, scoped by game.
-        Players and admins share the same wire — the role is set at handshake
-        time.
+        Players, admins and the projector board share the same wire — the role
+        is set at handshake time.
       </p>
     </section>
 
@@ -19,6 +19,7 @@
         <li>Connections live in "rooms" keyed by <code>gameID</code>.</li>
         <li>The hub doesn't know anything about questions or scoring — domain logic lives in <code>internal/api</code>, hooked via three callbacks: <code>OnJoin</code> / <code>OnLeave</code> / <code>OnRecv</code>.</li>
         <li>Reconnects replay an <code>answerAck</code> if the player already answered the active question, so refresh-mid-question lands on the right view.</li>
+        <li>A third role, <code>board</code>, connects with no credential at all — it is a screen, not a participant.</li>
         <li>30 s server ping / 75 s read deadline keep dead sockets from piling up.</li>
       </ul>
     </section>
@@ -29,20 +30,24 @@
         <li><code>backend/internal/ws/hub.go</code> — Hub, Client, read/write loops, broadcast helpers.</li>
         <li><code>backend/internal/api/ws.go</code> — handshake, role selection, message dispatch.</li>
         <li><code>backend/internal/api/broadcast.go</code> — envelope shapes (gameState, users, presence, …).</li>
-        <li><code>frontend/src/composables/useWebSocket.ts</code> — client-side reconnect loop.</li>
+        <li><code>frontend/src/services/ws.ts</code> — client-side reconnect loop.</li>
+        <li><code>frontend/src/pages/Board.vue</code> — the projector view that consumes the board role.</li>
       </ul>
     </section>
 
     <section class="card stack legal-prose api-prose">
       <h2>Handshake &amp; role</h2>
       <p>
-        Both roles use the same endpoint; the query string picks which:
+        All three roles use the same endpoint; the query string picks which:
       </p>
       <pre class="api-code">// Player
 GET /ws?token=&lt;playerToken&gt;
 
 // Admin
-GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
+GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;
+
+// Board — the projector view at /g/{code}/board
+GET /ws?role=board&amp;code=&lt;gameCode&gt;</pre>
       <p>
         <strong>Why query parameters instead of a header?</strong> Browser
         <code>WebSocket</code> constructors don't let you set arbitrary
@@ -51,6 +56,13 @@ GET /ws?role=admin&amp;token=&lt;adminJWT&gt;&amp;code=&lt;gameCode&gt;</pre>
         threat model.
       </p>
       <pre class="api-code">// backend/internal/api/ws.go
+if r.URL.Query().Get("role") == "board" {
+    // No token: a TV in the room is not a participant, so it gets no
+    // player identity and can only listen.
+    g, _ := s.DB.GameByCode(r.Context(), code)
+    s.Hub.Serve(w, r, g.ID, "", ws.RoleBoard)
+    return
+}
 if r.URL.Query().Get("role") == "admin" {
     c, err := auth.Parse(tok)
     if err != nil || c.Role != "admin" { /* 401 */ }
@@ -67,7 +79,17 @@ s.Hub.Serve(w, r, gameID, userID, role)</pre>
       <p>
         From this point on, the hub doesn't care which credential type was
         used — <code>Role</code> + <code>UserID</code> are enough for every
-        downstream check.
+        downstream check. A board carries an empty <code>UserID</code>, which
+        is exactly what excludes it from presence, from answer handling, and
+        from the leave broadcast.
+      </p>
+      <p>
+        <strong>An unauthenticated socket is a real decision, not an
+        oversight.</strong> The board shows what the room can already see on
+        the wall, and requiring a login would mean putting a credential on a
+        machine anyone can walk up to. What it gets instead is the
+        <em>player</em> view: poll option points stay hidden until the reveal,
+        so an open socket never leaks the answers.
       </p>
     </section>
 
@@ -117,7 +139,8 @@ type Hub struct {
 { "type": "questionsAdmin","data": Question[] } // admin only
 { "type": "presence",     "data": { online: string[] } } // admin only
 { "type": "answerAck",    "data": { questionId, responseMs } }
-{ "type": "playerAnswered","data": { userId, questionId, responseMs } } // admin only
+{ "type": "playerAnswered","data": { userId, questionId, responseMs } } // admin + board
+{ "type": "answeredSnapshot","data": { questionId, userIds } } // board only, on join
 { "type": "gameDeleted" }</pre>
       <p>
         Inbound (client → server) is just <code>answer</code> and
@@ -157,6 +180,27 @@ c.Send(s.gameStateEnvelope(ctx, g, c.Role == ws.RoleAdmin))</pre>
         Order matters: the <code>answerAck</code> goes <em>before</em>
         <code>gameState</code>, so the client transitions to "locked in" the
         moment the state lands.
+      </p>
+      <p>
+        The board has the same problem from the other side. Its lock-in strip
+        shows which teams have answered, and a TV that reboots mid-question
+        would come back with every name dark. So a board join replays the whole
+        set at once rather than one ack:
+      </p>
+      <pre class="api-code">case ws.RoleBoard:
+    if g.QuestionState == "active" &amp;&amp; g.CurrentQuestionID != nil {
+        ans, _ := s.DB.AnswersForQuestion(ctx, *g.CurrentQuestionID)
+        ids := make([]string, 0, len(ans))
+        for _, a := range ans { ids = append(ids, a.UserID) }
+        c.Send(map[string]any{
+            "type": "answeredSnapshot",
+            "data": map[string]any{"questionId": *g.CurrentQuestionID, "userIds": ids},
+        })
+    }</pre>
+      <p>
+        One envelope with every id, because the board renders a set rather
+        than a personal state. From then on it tracks the same
+        <code>playerAnswered</code> events the admin console uses.
       </p>
     </section>
 
@@ -222,6 +266,13 @@ if g.QuestionTimeoutSeconds &gt; 0 &amp;&amp; responseMs &gt; g.QuestionTimeoutS
           <strong>Single-replica.</strong> The hub is process-local. Adding a
           second backend replica without a fan-out bus would silently split
           players across rooms.
+        </li>
+        <li>
+          <strong>The board gets the player view, not the admin view.</strong>
+          Tempting to treat a projector as a trusted screen and hand it the
+          admin envelope — it is, after all, run by the host. But poll option
+          points are the answer, and the board is the one screen the whole room
+          is already staring at. It waits for the reveal like everyone else.
         </li>
         <li>
           <strong>30 s ping, 75 s read deadline.</strong> Three missed pings
