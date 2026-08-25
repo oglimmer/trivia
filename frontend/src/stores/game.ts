@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { onMessage, wsConnectPlayer } from '@/services/ws'
+import { onMessage, wsConnectBoard, wsConnectPlayer } from '@/services/ws'
 import { playerApi } from '@/services/api'
 import type {
   Answer,
@@ -21,6 +21,10 @@ export const useGameStore = defineStore('game', () => {
   const users = ref<User[]>([])
   const answers = ref<Answer[]>([])
   const lastAnswerAck = ref<AnswerAck | null>(null)
+  // Teams that have locked in an answer to the current question. Fed by the
+  // board's playerAnswered/answeredSnapshot messages so the TV can light names
+  // up live; stays empty for player connections, which never receive them.
+  const answeredUserIds = ref<string[]>([])
   const wsStarted = ref(false)
   const isAdmin = ref(!!localStorage.getItem('adminToken'))
   // serverClockOffsetMs = serverTime - clientTime, refreshed on each gameState.
@@ -37,6 +41,7 @@ export const useGameStore = defineStore('game', () => {
       case '_disconnected': connected.value = false; break
       case 'gameState': {
         const d = m.data
+        const prevQuestionId = game.value?.currentQuestionId
         if (d.serverNow) {
           serverClockOffsetMs.value = new Date(d.serverNow).getTime() - Date.now()
         }
@@ -53,6 +58,11 @@ export const useGameStore = defineStore('game', () => {
           questionIndex: d.questionIndex,
           totalQuestions: d.totalQuestions,
           leaderboardHidden: !!d.leaderboardHidden,
+          mode: d.mode,
+        }
+        // A new question (or a re-activation) clears the lit-up names.
+        if (d.currentQuestionId !== prevQuestionId || d.questionState === 'idle') {
+          answeredUserIds.value = []
         }
         question.value = d.question || null
         if (d.leaderboard) leaderboard.value = d.leaderboard
@@ -65,7 +75,27 @@ export const useGameStore = defineStore('game', () => {
       case 'answerAck':
         lastAnswerAck.value = m.data
         break
+      case 'answeredSnapshot':
+        if (m.data.questionId === game.value?.currentQuestionId) {
+          answeredUserIds.value = m.data.userIds ?? []
+        }
+        break
+      case 'playerAnswered':
+        if (m.data.questionId === game.value?.currentQuestionId
+          && !answeredUserIds.value.includes(m.data.userId)) {
+          answeredUserIds.value = [...answeredUserIds.value, m.data.userId]
+        }
+        break
     }
+  }
+
+  // Board connections have no player token and never send anything; they reuse
+  // the same message handler so the TV parses state exactly like a phone does.
+  function ensureBoardWS(code: string): void {
+    if (wsStarted.value) return
+    onMessage(handle)
+    wsConnectBoard(code)
+    wsStarted.value = true
   }
 
   async function ensureWS(): Promise<void> {
@@ -144,6 +174,7 @@ export const useGameStore = defineStore('game', () => {
     users,
     answers,
     lastAnswerAck,
+    answeredUserIds,
     wsStarted,
     isAdmin,
     serverClockOffsetMs,
@@ -153,6 +184,7 @@ export const useGameStore = defineStore('game', () => {
     isFinished,
     // actions
     ensureWS,
+    ensureBoardWS,
     loadMe,
     setMe,
     updateMe,

@@ -16,13 +16,14 @@ import (
 // Methods are grouped by aggregate purely for readability.
 type Store interface {
 	// Games
-	CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time) (*db.Game, error)
+	CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time, mode string) (*db.Game, error)
 	GameByCode(ctx context.Context, code string) (*db.Game, error)
 	GameByID(ctx context.Context, id string) (*db.Game, error)
 	ListGames(ctx context.Context) ([]db.Game, error)
 	SetGameState(ctx context.Context, id, state string) error
 	SetQuestionTimeout(ctx context.Context, id string, seconds int) error
 	SetGameScheduledAt(ctx context.Context, id string, scheduledAt *time.Time) error
+	SetHideLeaderboardTail(ctx context.Context, id string, hide bool) error
 	ActiveQuestionGameIDs(ctx context.Context) ([]string, error)
 	DeleteGame(ctx context.Context, id string) error
 	ActivateQuestion(ctx context.Context, gameID, qID string) error
@@ -47,6 +48,10 @@ type Store interface {
 	QuestionByID(ctx context.Context, id string) (*db.Question, error)
 	DeleteQuestion(ctx context.Context, id string) error
 	RandomizeQuestionOrder(ctx context.Context, gameID string) error
+	ReplaceHostQuestions(ctx context.Context, gameID string, items []db.HostQuestion) ([]db.Question, error)
+	CreateHostQuestion(ctx context.Context, gameID string, it db.HostQuestion) (*db.Question, error)
+	UpdateHostQuestion(ctx context.Context, questionID string, it db.HostQuestion) (*db.Question, error)
+	MoveQuestion(ctx context.Context, gameID, questionID string, delta int) error
 
 	// Answers
 	SaveAnswer(ctx context.Context, questionID, userID string, answer json.RawMessage, responseMs int, isCorrect bool, points int) error

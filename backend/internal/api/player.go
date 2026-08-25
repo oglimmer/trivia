@@ -190,6 +190,9 @@ func (s *Server) listQuestionsPublic(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	// Poll options carry survey point values that must not reach a phone before
+	// the game is over — otherwise every team can read the scores off the wire.
+	sanitizeQuestionsForPlayers(qs, g.State == "finished")
 	// Only expose correct answers once the game is finished. Before then,
 	// players may still see the correct answer for their OWN question (so the
 	// editor can restore it); everyone else's is stripped.

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/oglimmer/trivia/backend/internal/db"
+	"github.com/oglimmer/trivia/backend/internal/game"
 )
 
 // resultsBucket is a single row in a question's answer distribution.
@@ -154,6 +155,41 @@ func distributionFor(q db.Question, ans []db.Answer) []resultsBucket {
 				Value:     raw,
 				Count:     counts[i],
 				IsCorrect: i == correctIdx,
+			}
+		}
+		return out
+	case "poll":
+		// Every option was worth something, so "isCorrect" is not a useful
+		// label here — the value each answer carried is. The frontend reads it
+		// off the options; this distribution just says how the room split.
+		opts := game.ParsePollOptions(q.Options)
+		counts := make([]int, len(opts))
+		for _, a := range ans {
+			var idx int
+			if err := json.Unmarshal(a.Answer, &idx); err != nil {
+				continue
+			}
+			if idx < 0 || idx >= len(opts) {
+				continue
+			}
+			counts[idx]++
+		}
+		out := make([]resultsBucket, len(opts))
+		topPoints := 0
+		for _, o := range opts {
+			if o.Points > topPoints {
+				topPoints = o.Points
+			}
+		}
+		for i, o := range opts {
+			rawIdx, _ := json.Marshal(i)
+			out[i] = resultsBucket{
+				Label: o.Text,
+				Value: rawIdx,
+				Count: counts[i],
+				// The #1 survey answer is the closest thing to "correct" and is
+				// what the results page highlights.
+				IsCorrect: o.Points == topPoints && topPoints > 0,
 			}
 		}
 		return out

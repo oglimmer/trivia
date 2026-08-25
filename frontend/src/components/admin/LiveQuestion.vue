@@ -12,9 +12,10 @@
     </div>
 
     <div v-if="question" class="stack">
-      <div class="photo-frame">
+      <!-- Imported (poll) questions carry no photo and no author. -->
+      <div v-if="question.photoImageId" class="photo-frame">
         <img :src="imageUrl(question.photoImageId, 'medium')" alt="" loading="lazy" decoding="async" />
-        <div class="q-author">by {{ authorName }}</div>
+        <div v-if="authorName" class="q-author">by {{ authorName }}</div>
       </div>
       <div class="q-card__text">{{ question.text }}</div>
 

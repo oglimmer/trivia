@@ -15,7 +15,7 @@ func raw(t *testing.T, v any) json.RawMessage {
 }
 
 func TestYesNoCorrectAndTimeBonus(t *testing.T) {
-	ok, pts := JudgeAnswer("yesno", 2, raw(t, "yes"), raw(t, "yes"), 0)
+	ok, pts := JudgeAnswer("yesno", 2, nil, raw(t, "yes"), raw(t, "yes"), 0, 0)
 	if !ok {
 		t.Fatalf("expected correct")
 	}
@@ -25,7 +25,7 @@ func TestYesNoCorrectAndTimeBonus(t *testing.T) {
 }
 
 func TestYesNoWrong(t *testing.T) {
-	ok, pts := JudgeAnswer("yesno", 2, raw(t, "yes"), raw(t, "no"), 1000)
+	ok, pts := JudgeAnswer("yesno", 2, nil, raw(t, "yes"), raw(t, "no"), 1000, 0)
 	if ok || pts != 0 {
 		t.Fatalf("expected wrong/0, got ok=%v pts=%d", ok, pts)
 	}
@@ -35,7 +35,7 @@ func TestChoiceScalesWithOptionCount(t *testing.T) {
 	for _, tc := range []struct {
 		opts, want int
 	}{{2, 100}, {3, 200}, {4, 300}} {
-		_, pts := JudgeAnswer("choice", tc.opts, raw(t, 1), raw(t, 1), AnswerWindowMs)
+		_, pts := JudgeAnswer("choice", tc.opts, nil, raw(t, 1), raw(t, 1), AnswerWindowMs, 0)
 		if pts != tc.want {
 			t.Fatalf("options=%d: expected %d, got %d", tc.opts, tc.want, pts)
 		}
@@ -43,9 +43,9 @@ func TestChoiceScalesWithOptionCount(t *testing.T) {
 }
 
 func TestTimeBonusDecays(t *testing.T) {
-	_, fast := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 0)
-	_, mid := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 15_000)
-	_, slow := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 0), 30_000)
+	_, fast := JudgeAnswer("choice", 3, nil, raw(t, 0), raw(t, 0), 0, 0)
+	_, mid := JudgeAnswer("choice", 3, nil, raw(t, 0), raw(t, 0), 15_000, 0)
+	_, slow := JudgeAnswer("choice", 3, nil, raw(t, 0), raw(t, 0), 30_000, 0)
 	if fast <= mid || mid <= slow {
 		t.Fatalf("expected monotonic decay, got fast=%d mid=%d slow=%d", fast, mid, slow)
 	}
@@ -57,7 +57,7 @@ func TestTimeBonusDecays(t *testing.T) {
 func TestJudgeNumberDefersScoring(t *testing.T) {
 	// Number answers are scored later via ScoreNumberAnswers; JudgeAnswer
 	// returns a 0/false placeholder regardless of correctness or speed.
-	ok, pts := JudgeAnswer("number", 0, raw(t, 100.0), raw(t, 100.0), 0)
+	ok, pts := JudgeAnswer("number", 0, nil, raw(t, 100.0), raw(t, 100.0), 0, 0)
 	if ok || pts != 0 {
 		t.Fatalf("expected deferred (false, 0), got ok=%v pts=%d", ok, pts)
 	}
@@ -66,7 +66,7 @@ func TestJudgeNumberDefersScoring(t *testing.T) {
 func TestScoreNumberExactGetsTimeBonus(t *testing.T) {
 	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "a", Answer: raw(t, 100.0), ResponseMs: 0},
-	})
+	}, 0)
 	if len(scores) != 1 {
 		t.Fatalf("want 1 score, got %d", len(scores))
 	}
@@ -84,7 +84,7 @@ func TestScoreNumberTopThreeOnly(t *testing.T) {
 		{UserID: "b", Answer: raw(t, 107.0), ResponseMs: 5000},
 		{UserID: "c", Answer: raw(t, 112.0), ResponseMs: 5000},
 		{UserID: "d", Answer: raw(t, 120.0), ResponseMs: 5000},
-	})
+	}, 0)
 	byUser := map[string]NumberScore{}
 	for _, s := range scores {
 		byUser[s.UserID] = s
@@ -113,10 +113,10 @@ func TestScoreNumberNoTimeBonusForNonExact(t *testing.T) {
 	// bonus, so points should match.
 	fast := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "a", Answer: raw(t, 110.0), ResponseMs: 0},
-	})
+	}, 0)
 	slow := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "a", Answer: raw(t, 110.0), ResponseMs: 29_000},
-	})
+	}, 0)
 	if fast[0].Points != slow[0].Points {
 		t.Fatalf("non-exact guesses must not get a time bonus: fast=%d slow=%d", fast[0].Points, slow[0].Points)
 	}
@@ -127,7 +127,7 @@ func TestScoreNumberWildGuessGetsZero(t *testing.T) {
 	// technically the top-1 — closeness collapses to 0.
 	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "a", Answer: raw(t, 100000.0), ResponseMs: 0},
-	})
+	}, 0)
 	if scores[0].Points != 0 {
 		t.Fatalf("wild guess should get 0, got %d", scores[0].Points)
 	}
@@ -201,7 +201,7 @@ func TestJudgeAnswerInvalidJSONReturnsZero(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			ok, pts := JudgeAnswer(c.answerType, 2, c.correct, c.answer, 0)
+			ok, pts := JudgeAnswer(c.answerType, 2, nil, c.correct, c.answer, 0, 0)
 			if ok || pts != 0 {
 				t.Fatalf("expected (false, 0), got (%v, %d)", ok, pts)
 			}
@@ -210,24 +210,24 @@ func TestJudgeAnswerInvalidJSONReturnsZero(t *testing.T) {
 }
 
 func TestJudgeAnswerUnknownType(t *testing.T) {
-	ok, pts := JudgeAnswer("essay", 0, raw(t, "a"), raw(t, "a"), 0)
+	ok, pts := JudgeAnswer("essay", 0, nil, raw(t, "a"), raw(t, "a"), 0, 0)
 	if ok || pts != 0 {
 		t.Fatalf("unknown answerType should be (false, 0), got (%v, %d)", ok, pts)
 	}
 }
 
 func TestJudgeChoiceWrongAnswerIsZero(t *testing.T) {
-	ok, pts := JudgeAnswer("choice", 3, raw(t, 0), raw(t, 1), 0)
+	ok, pts := JudgeAnswer("choice", 3, nil, raw(t, 0), raw(t, 1), 0, 0)
 	if ok || pts != 0 {
 		t.Fatalf("wrong choice should be (false, 0), got (%v, %d)", ok, pts)
 	}
 }
 
 func TestScoreNumberEmpty(t *testing.T) {
-	if scores := ScoreNumberAnswers(raw(t, 100.0), nil); len(scores) != 0 {
+	if scores := ScoreNumberAnswers(raw(t, 100.0), nil, 0); len(scores) != 0 {
 		t.Fatalf("nil input should yield empty result, got %d entries", len(scores))
 	}
-	if scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{}); len(scores) != 0 {
+	if scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{}, 0); len(scores) != 0 {
 		t.Fatalf("empty input should yield empty result, got %d entries", len(scores))
 	}
 }
@@ -237,7 +237,7 @@ func TestScoreNumberBadCorrectJSON(t *testing.T) {
 	// returned slice still has one entry per submitted answer (with zero values).
 	scores := ScoreNumberAnswers(json.RawMessage(`"oops"`), []NumberAnswer{
 		{UserID: "a", Answer: raw(t, 100.0), ResponseMs: 0},
-	})
+	}, 0)
 	if len(scores) != 1 {
 		t.Fatalf("want 1 score entry, got %d", len(scores))
 	}
@@ -252,7 +252,7 @@ func TestScoreNumberSkipsMalformedAnswer(t *testing.T) {
 	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "good", Answer: raw(t, 100.0), ResponseMs: 0},
 		{UserID: "bad", Answer: json.RawMessage(`not-a-number`), ResponseMs: 0},
-	})
+	}, 0)
 	if len(scores) != 2 {
 		t.Fatalf("want 2 score entries, got %d", len(scores))
 	}
@@ -274,7 +274,7 @@ func TestScoreNumberTieBrokenByResponseTime(t *testing.T) {
 	scores := ScoreNumberAnswers(raw(t, 100.0), []NumberAnswer{
 		{UserID: "slow", Answer: raw(t, 110.0), ResponseMs: 10_000},
 		{UserID: "fast", Answer: raw(t, 110.0), ResponseMs: 1_000},
-	})
+	}, 0)
 	byUser := map[string]NumberScore{}
 	for _, s := range scores {
 		byUser[s.UserID] = s

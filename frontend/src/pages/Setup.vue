@@ -4,6 +4,28 @@
       <div class="spinner" aria-hidden="true"></div>
     </div>
 
+    <!--
+      Poll games are host-authored: teams never write questions, so the whole
+      3-step editor is replaced by a lobby that just confirms they're in.
+    -->
+    <div v-else-if="isPoll" class="card card--mint stack center card-stickered">
+      <div style="font-size: 3rem; line-height: 1;">🙌</div>
+      <h1>You're in{{ myName ? `, ${myName}` : '' }}!</h1>
+      <p style="margin: 0;">{{ pollWaitingMessage }}</p>
+
+      <div class="card card--cream stack" style="text-align: left; width: 100%;">
+        <h2 style="margin: 0; font-size: 1rem;">How this works</h2>
+        <p class="muted" style="margin: 0;">
+          We asked people the same questions before tonight. You won't be guessing
+          the <em>right</em> answer — you'll be guessing the <strong>most popular</strong> one.
+          Every option scores; the more people who said it, the more it's worth.
+          Talk it out as a team, then one of you taps.
+        </p>
+      </div>
+
+      <EmailCapture v-if="offerEmail" />
+    </div>
+
     <transition v-else name="fade" mode="out-in">
       <div v-if="saved && !editing" key="waiting" class="card card--mint stack center card-stickered">
         <div style="font-size: 3rem; line-height: 1;">🎉</div>
@@ -167,16 +189,16 @@
     </transition>
 
     <transition name="fade">
-      <button v-if="showSaveHint" class="save-hint" type="button" @click="scrollToSave">
+      <button v-if="showSaveHint && !isPoll" class="save-hint" type="button" @click="scrollToSave">
         <span>Scroll down to save your question</span>
         <span class="save-hint__arrow" aria-hidden="true">↓</span>
       </button>
     </transition>
 
-    <ScoringInfoDialog :open="scoringInfoOpen" @close="scoringInfoOpen = false" />
+    <ScoringInfoDialog v-if="!isPoll" :open="scoringInfoOpen" @close="scoringInfoOpen = false" />
 
     <transition name="fade">
-      <div v-if="aiBusy" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ai-busy-title">
+      <div v-if="aiBusy && !isPoll" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ai-busy-title">
         <div class="modal stack center">
           <div class="spinner" aria-hidden="true"></div>
           <h2 id="ai-busy-title" style="margin: 0;">Cooking up a question…</h2>
@@ -187,7 +209,7 @@
 
     <div class="card card--cream">
       <div class="row between" style="margin-bottom: 12px;">
-        <h2 style="margin: 0;">Players in the room</h2>
+        <h2 style="margin: 0;">{{ isPoll ? 'Teams in the room' : 'Players in the room' }}</h2>
         <span class="tag tag--blue">{{ users.length }}</span>
       </div>
       <div class="row wrap" style="gap: 10px;">
@@ -214,7 +236,12 @@ import { useGameStore } from '@/stores/game'
 import { errMsg } from '@/composables/errMsg'
 import { useSaveHint } from '@/composables/useSaveHint'
 import { formatScheduled } from '@/utils/schedule'
-import type { AnswerType, Question } from '@/types'
+import type { Question } from '@/types'
+import type { QuestionBody } from '@/services/api'
+
+// The player-facing editor authors classic questions only; 'poll' questions
+// come from the host's import and are never edited here.
+type AuthoredAnswerType = QuestionBody['answerType']
 
 const props = defineProps<{ code: string }>()
 const router = useRouter()
@@ -223,7 +250,7 @@ const store = useGameStore()
 const photoId = ref('')
 const pickerBusy = ref(false)
 const text = ref('')
-const answerType = ref<AnswerType>('yesno')
+const answerType = ref<AuthoredAnswerType>('yesno')
 const correct = ref<'yes' | 'no'>('yes')
 const options = ref<string[]>(['', ''])
 const correctIdx = ref(0)
@@ -243,6 +270,27 @@ const saveBtnRef = ref<HTMLButtonElement | null>(null)
 const { visible: showSaveHint, arm: armSaveHint, dismiss: dismissSaveHint, scrollTo: scrollToSave } = useSaveHint(saveBtnRef)
 
 const users = computed(() => store.users)
+const isPoll = computed(() => store.game?.mode === 'poll')
+const myName = computed(() => store.me?.name || '')
+
+// The classic waitingMessage talks about "your question", which a team in a
+// poll game never wrote.
+const pollWaitingMessage = computed(() => {
+  const sched = store.game?.scheduledAt
+  const startMs = sched ? new Date(sched).getTime() : NaN
+  if (!sched || isNaN(startMs)) {
+    return 'Keep this phone handy — the host kicks things off when every team is in.'
+  }
+  const diffMs = startMs - (nowMs.value + store.serverClockOffsetMs)
+  if (diffMs <= 2 * 60 * 1000) {
+    return 'Keep this phone handy — we start any moment now.'
+  }
+  const mins = Math.round(diffMs / 60_000)
+  if (mins < 60) {
+    return `Keep this phone handy — we start in about ${mins} minute${mins === 1 ? '' : 's'}.`
+  }
+  return `Keep this phone handy — we start at ${formatScheduled(sched)}.`
+})
 
 const WAIT_NOTICE_THRESHOLD_MS = 60 * 60 * 1000
 
@@ -342,9 +390,11 @@ watch(() => store.game && store.game.state, (s) => {
 function hydrateFromQuestion(q: Question) {
   text.value = q.text
   photoId.value = q.photoImageId || ''
+  if (q.answerType === 'poll') return
   answerType.value = q.answerType
   if (q.answerType === 'choice') {
-    options.value = Array.isArray(q.options) && q.options.length ? q.options : ['', '']
+    const opts = (q.options || []) as string[]
+    options.value = opts.length ? opts : ['', '']
   }
   if (q.correct != null) {
     if (q.answerType === 'yesno') correct.value = q.correct === 'no' ? 'no' : 'yes'
@@ -406,7 +456,7 @@ async function save() {
     const body: {
       text: string
       photoImageId: string
-      answerType: AnswerType
+      answerType: AuthoredAnswerType
       options: string[]
       correct?: string | number
     } = {

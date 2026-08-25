@@ -49,6 +49,9 @@ type createGameBody struct {
 	Name                   string     `json:"name"`
 	QuestionTimeoutSeconds int        `json:"questionTimeoutSeconds"`
 	ScheduledAt            *time.Time `json:"scheduledAt"`
+	// Mode is "classic" (players write the questions) or "poll" (the host
+	// imports a survey-derived question set). Empty means classic.
+	Mode string `json:"mode"`
 }
 
 func (s *Server) listGames(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +100,15 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 	if b.Code == "" {
 		b.Code = randomCode()
 	}
-	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds), b.ScheduledAt)
+	mode := strings.TrimSpace(b.Mode)
+	if mode == "" {
+		mode = "classic"
+	}
+	if mode != "classic" && mode != "poll" {
+		writeErr(w, http.StatusBadRequest, "mode must be classic or poll")
+		return
+	}
+	g, err := s.DB.CreateGame(r.Context(), b.Code, b.Name, clampTimeout(b.QuestionTimeoutSeconds), b.ScheduledAt, mode)
 	if err != nil {
 		if errors.Is(err, db.ErrCodeTaken) {
 			writeErr(w, http.StatusConflict, "Game code \""+b.Code+"\" is already in use. Please choose a different code.")
@@ -250,10 +261,15 @@ func (s *Server) setGameState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		prunedUsers = len(removed) > 0
-		// Shuffle question order before entering game mode.
-		if err := s.DB.RandomizeQuestionOrder(r.Context(), g.ID); err != nil {
-			serverError(w, r, err)
-			return
+		// Shuffle question order before entering game mode — but only for
+		// player-written questions, where the order is arbitrary anyway. A
+		// host-authored poll set was uploaded in a deliberate running order
+		// (warm-up first, best question last), so leave it alone.
+		if g.Mode != "poll" {
+			if err := s.DB.RandomizeQuestionOrder(r.Context(), g.ID); err != nil {
+				serverError(w, r, err)
+				return
+			}
 		}
 		if err := s.DB.ClearCurrentQuestion(r.Context(), g.ID); err != nil {
 			serverError(w, r, err)
@@ -281,6 +297,7 @@ func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		QuestionTimeoutSeconds *int            `json:"questionTimeoutSeconds"`
 		ScheduledAt            json.RawMessage `json:"scheduledAt"`
+		HideLeaderboardTail    *bool           `json:"hideLeaderboardTail"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad body")
@@ -314,6 +331,12 @@ func (s *Server) updateGameSettings(w http.ResponseWriter, r *http.Request) {
 			sched = &t
 		}
 		if err := s.DB.SetGameScheduledAt(r.Context(), g.ID, sched); err != nil {
+			serverError(w, r, err)
+			return
+		}
+	}
+	if b.HideLeaderboardTail != nil {
+		if err := s.DB.SetHideLeaderboardTail(r.Context(), g.ID, *b.HideLeaderboardTail); err != nil {
 			serverError(w, r, err)
 			return
 		}
@@ -444,5 +467,158 @@ func (s *Server) finishGame(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cancelAutoClose(g.ID)
 	s.broadcastGameState(r.Context(), g.ID)
+	w.WriteHeader(204)
+}
+
+// importQuestions replaces a poll game's host-authored question set from a
+// pasted JSON payload. Setup-only: once the game is running, swapping the
+// questions out from under the players would orphan their answers.
+func (s *Server) importQuestions(w http.ResponseWriter, r *http.Request) {
+	g := s.loadGameByCode(w, r)
+	if g == nil {
+		return
+	}
+	if g.Mode != "poll" {
+		writeErr(w, http.StatusBadRequest, "question import is only available for poll games")
+		return
+	}
+	if g.State != "setup" {
+		writeErr(w, http.StatusBadRequest, "questions can only be imported in setup")
+		return
+	}
+	var b importQuestionsBody
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad body: "+err.Error())
+		return
+	}
+	items, err := b.toHostQuestions(shuffleOptions)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	qs, err := s.DB.ReplaceHostQuestions(r.Context(), g.ID, items)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
+	s.broadcastGameState(r.Context(), g.ID)
+	writeJSON(w, 200, map[string]any{"imported": len(qs), "questions": qs})
+}
+
+// pollQuestionGame resolves the game for a poll question CRUD call and rejects
+// the cases where editing the set is not allowed: a classic game (whose
+// questions belong to their player authors) and a game that has already
+// started (swapping questions out from under the teams would orphan answers).
+func (s *Server) pollQuestionGame(w http.ResponseWriter, r *http.Request) *db.Game {
+	g := s.loadGameByCode(w, r)
+	if g == nil {
+		return nil
+	}
+	if g.Mode != "poll" {
+		writeErr(w, http.StatusBadRequest, "this game's questions are written by the players")
+		return nil
+	}
+	if g.State != "setup" {
+		writeErr(w, http.StatusBadRequest, "questions can only be edited in setup")
+		return nil
+	}
+	return g
+}
+
+func (s *Server) createPollQuestion(w http.ResponseWriter, r *http.Request) {
+	g := s.pollQuestionGame(w, r)
+	if g == nil {
+		return
+	}
+	var b importedQuestion
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad body: "+err.Error())
+		return
+	}
+	item, err := buildPollQuestion(b, shuffleOptions)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	q, err := s.DB.CreateHostQuestion(r.Context(), g.ID, item)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
+	s.broadcastGameState(r.Context(), g.ID)
+	writeJSON(w, 200, q)
+}
+
+func (s *Server) updatePollQuestion(w http.ResponseWriter, r *http.Request) {
+	g := s.pollQuestionGame(w, r)
+	if g == nil {
+		return
+	}
+	qID := chi.URLParam(r, "questionId")
+	existing, err := s.DB.QuestionByID(r.Context(), qID)
+	if err != nil || existing.GameID != g.ID {
+		writeErr(w, http.StatusNotFound, "no question")
+		return
+	}
+	var b importedQuestion
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad body: "+err.Error())
+		return
+	}
+	item, err := buildPollQuestion(b, shuffleOptions)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	q, err := s.DB.UpdateHostQuestion(r.Context(), qID, item)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "no question")
+			return
+		}
+		serverError(w, r, err)
+		return
+	}
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
+	writeJSON(w, 200, q)
+}
+
+// movePollQuestion shifts a question one slot in the running order. Poll sets
+// are played in the order the host arranged them, so this is the only way to
+// put the warm-up first and the best question last.
+func (s *Server) movePollQuestion(w http.ResponseWriter, r *http.Request) {
+	g := s.pollQuestionGame(w, r)
+	if g == nil {
+		return
+	}
+	var b struct {
+		Direction string `json:"direction"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad body")
+		return
+	}
+	delta := 0
+	switch b.Direction {
+	case "up":
+		delta = -1
+	case "down":
+		delta = 1
+	default:
+		writeErr(w, http.StatusBadRequest, "direction must be up or down")
+		return
+	}
+	err := s.DB.MoveQuestion(r.Context(), g.ID, chi.URLParam(r, "questionId"), delta)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "no question")
+			return
+		}
+		serverError(w, r, err)
+		return
+	}
+	s.broadcastQuestionsAdmin(r.Context(), g.ID)
 	w.WriteHeader(204)
 }

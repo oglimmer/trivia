@@ -17,6 +17,22 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	gameID := ""
 	userID := ""
 
+	// Board path: ?role=board&code=<code>. No token — a TV in the room is not a
+	// participant, so it gets no player identity and can only listen.
+	if r.URL.Query().Get("role") == "board" {
+		g, err := s.DB.GameByCode(r.Context(), r.URL.Query().Get("code"))
+		if err != nil {
+			http.Error(w, "no game", http.StatusNotFound)
+			return
+		}
+		start := time.Now()
+		s.Hub.Serve(w, r, g.ID, "", ws.RoleBoard)
+		if s.Metrics != nil {
+			s.Metrics.RecordWSSession(string(ws.RoleBoard), time.Since(start))
+		}
+		return
+	}
+
 	// Admin path: ?role=admin&token=<jwt>&code=<code>
 	if r.URL.Query().Get("role") == "admin" {
 		tok := r.URL.Query().Get("token")
@@ -96,6 +112,24 @@ func (s *Server) onWSJoin(c *ws.Client) {
 		c.Send(map[string]any{"type": "users", "data": users})
 	}
 	switch c.Role {
+	case ws.RoleBoard:
+		// Replay who has already locked in, so a board refresh mid-question
+		// comes back with the right names lit rather than a blank row.
+		if g.QuestionState == "active" && g.CurrentQuestionID != nil {
+			ans, err := s.DB.AnswersForQuestion(ctx, *g.CurrentQuestionID)
+			if err != nil {
+				log.Printf("ws board join answers for question %s: %v", *g.CurrentQuestionID, err)
+			} else {
+				ids := make([]string, 0, len(ans))
+				for _, a := range ans {
+					ids = append(ids, a.UserID)
+				}
+				c.Send(map[string]any{
+					"type": "answeredSnapshot",
+					"data": map[string]any{"questionId": *g.CurrentQuestionID, "userIds": ids},
+				})
+			}
+		}
 	case ws.RoleAdmin:
 		qs, err := s.DB.ListQuestions(ctx, c.GameID, true)
 		if err != nil {
@@ -183,7 +217,8 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 		return
 	}
 	optCount := game.OptionCount(q.AnswerType, q.Options)
-	ok, pts := game.JudgeAnswer(q.AnswerType, optCount, q.Correct, m.Value, responseMs)
+	ok, pts := game.JudgeAnswer(q.AnswerType, optCount, q.Options, q.Correct, m.Value, responseMs,
+		g.QuestionTimeoutSeconds*1000)
 	if err := s.DB.SaveAnswer(ctx, q.ID, c.UserID, m.Value, responseMs, ok, pts); err != nil {
 		log.Printf("save answer: %v", err)
 	}
@@ -195,8 +230,11 @@ func (s *Server) handleAnswer(c *ws.Client, data json.RawMessage) {
 		"type": "answerAck",
 		"data": map[string]any{"questionId": q.ID, "responseMs": responseMs},
 	})
+	// The board lights up each team's name as they lock in, so it needs the
+	// same event the admin console uses. Points are not included — only the
+	// fact that this team has answered.
 	s.Hub.BroadcastTo(c.GameID, map[string]any{
 		"type": "playerAnswered",
 		"data": map[string]any{"userId": c.UserID, "questionId": q.ID, "responseMs": responseMs},
-	}, func(cl *ws.Client) bool { return cl.Role == ws.RoleAdmin })
+	}, func(cl *ws.Client) bool { return cl.Role == ws.RoleAdmin || cl.Role == ws.RoleBoard })
 }

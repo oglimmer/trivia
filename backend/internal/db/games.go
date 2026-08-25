@@ -12,21 +12,26 @@ import (
 const gameCodeUniqueConstraint = "games_code_key"
 
 const gameColumns = `id, code, name, state, current_question_id, question_state,
-	question_started_at, question_closed_at, question_timeout_seconds, scheduled_at, created_at`
+	question_started_at, question_closed_at, question_timeout_seconds, scheduled_at,
+	mode, hide_leaderboard_tail, created_at`
 
 func scanGame(row pgx.Row, g *Game) error {
 	return row.Scan(&g.ID, &g.Code, &g.Name, &g.State, &g.CurrentQuestionID,
 		&g.QuestionState, &g.QuestionStartedAt, &g.QuestionClosedAt,
-		&g.QuestionTimeoutSeconds, &g.ScheduledAt, &g.CreatedAt)
+		&g.QuestionTimeoutSeconds, &g.ScheduledAt,
+		&g.Mode, &g.HideLeaderboardTail, &g.CreatedAt)
 }
 
-func (d *DB) CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time) (*Game, error) {
+// CreateGame inserts a game. A 'poll' game starts with the leaderboard
+// suspense tail disabled: the format is built around a live board on a TV, so
+// hiding the standings for the last few questions would defeat the point.
+func (d *DB) CreateGame(ctx context.Context, code, name string, questionTimeoutSeconds int, scheduledAt *time.Time, mode string) (*Game, error) {
 	g := &Game{}
 	row := d.Pool.QueryRow(ctx, `
-		INSERT INTO games(code, name, question_timeout_seconds, scheduled_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO games(code, name, question_timeout_seconds, scheduled_at, mode, hide_leaderboard_tail)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+gameColumns,
-		code, name, questionTimeoutSeconds, scheduledAt)
+		code, name, questionTimeoutSeconds, scheduledAt, mode, mode != "poll")
 	if err := scanGame(row, g); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == gameCodeUniqueConstraint {
@@ -85,6 +90,11 @@ func (d *DB) SetGameState(ctx context.Context, id, state string) error {
 
 func (d *DB) SetQuestionTimeout(ctx context.Context, id string, seconds int) error {
 	_, err := d.Pool.Exec(ctx, `UPDATE games SET question_timeout_seconds=$1 WHERE id=$2`, seconds, id)
+	return err
+}
+
+func (d *DB) SetHideLeaderboardTail(ctx context.Context, id string, hide bool) error {
+	_, err := d.Pool.Exec(ctx, `UPDATE games SET hide_leaderboard_tail=$1 WHERE id=$2`, hide, id)
 	return err
 }
 

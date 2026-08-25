@@ -4,6 +4,7 @@ import Join from './pages/Join.vue'
 import Setup from './pages/Setup.vue'
 import Game from './pages/Game.vue'
 import Results from './pages/Results.vue'
+import Board from './pages/Board.vue'
 import AdminLogin from './pages/AdminLogin.vue'
 import AdminGames from './pages/AdminGames.vue'
 import AdminGame from './pages/AdminGame.vue'
@@ -35,6 +36,10 @@ const router = createRouter({
     { path: '/g/:code/setup', component: Setup, props: true },
     { path: '/g/:code/play', component: Game, props: true },
     { path: '/g/:code/results', component: Results, props: true },
+    // Projector / TV view. Read-only, no player token, not a participant.
+    // `fullscreen` drops the app header/footer and the 760px column — this one
+    // is sized for a room, not a hand.
+    { path: '/g/:code/board', component: Board, props: true, meta: { fullscreen: true } },
     { path: '/admin', component: AdminLogin },
     { path: '/admin/games', component: AdminGames },
     { path: '/admin/users', component: AdminUsers },

@@ -4,17 +4,33 @@ import type {
   AdminGameResponse,
   AdminGamesEntry,
   Game,
+  GameMode,
   ImpersonateResponse,
   Question,
   QuestionResults,
 } from '@/types'
 
-export interface CreateGameBody { code?: string; name: string; questionTimeoutSeconds?: number; scheduledAt?: string | null }
+export interface CreateGameBody {
+  code?: string
+  name: string
+  questionTimeoutSeconds?: number
+  scheduledAt?: string | null
+  // 'classic' (players write the questions) or 'poll' (host imports a
+  // survey-derived set). Omit for classic.
+  mode?: GameMode
+}
 export interface UpdateSettingsBody {
   questionTimeoutSeconds?: number
   // string -> set; null -> clear; omit -> leave unchanged.
   scheduledAt?: string | null
+  hideLeaderboardTail?: boolean
 }
+
+// The pasted import payload: one entry per question, each with the top 5
+// survey answers and how many people gave them.
+export interface ImportAnswer { text: string; points: number }
+export interface ImportQuestion { text: string; answers: ImportAnswer[] }
+export interface ImportQuestionsBody { questions: ImportQuestion[] }
 
 export const adminApi = {
   login: (password: string) => request<{ token: string }>('POST', '/admin/login', { password }),
@@ -37,4 +53,12 @@ export const adminApi = {
   deleteUser: (code: string, userId: string) => request<null>('DELETE', `/admin/games/${code}/users/${userId}`),
   impersonate: (code: string, userId: string) => request<ImpersonateResponse>('GET', `/admin/games/${code}/users/${userId}/impersonate`),
   deleteQuestion: (code: string, questionId: string) => request<null>('DELETE', `/admin/games/${code}/questions/${questionId}`),
+  importQuestions: (code: string, body: ImportQuestionsBody) =>
+    request<{ imported: number; questions: Question[] }>('POST', `/admin/games/${code}/questions/import`, body),
+  createQuestion: (code: string, body: ImportQuestion) =>
+    request<Question>('POST', `/admin/games/${code}/questions`, body),
+  updateQuestion: (code: string, questionId: string, body: ImportQuestion) =>
+    request<Question>('PUT', `/admin/games/${code}/questions/${questionId}`, body),
+  moveQuestion: (code: string, questionId: string, direction: 'up' | 'down') =>
+    request<null>('POST', `/admin/games/${code}/questions/${questionId}/move`, { direction }),
 }

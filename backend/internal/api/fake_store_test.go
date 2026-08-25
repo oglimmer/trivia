@@ -49,7 +49,7 @@ func (f *fakeStore) nextID(prefix string) string {
 
 // ---- Games ----
 
-func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int, scheduledAt *time.Time) (*db.Game, error) {
+func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int, scheduledAt *time.Time, mode string) (*db.Game, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, g := range f.games {
@@ -65,6 +65,8 @@ func (f *fakeStore) CreateGame(_ context.Context, code, name string, timeout int
 		QuestionState:          "idle",
 		QuestionTimeoutSeconds: timeout,
 		ScheduledAt:            scheduledAt,
+		Mode:                   mode,
+		HideLeaderboardTail:    mode != "poll",
 		CreatedAt:              f.now(),
 	}
 	f.games[g.ID] = g
@@ -138,6 +140,17 @@ func (f *fakeStore) SetGameScheduledAt(_ context.Context, id string, scheduledAt
 		v := *scheduledAt
 		g.ScheduledAt = &v
 	}
+	return nil
+}
+
+func (f *fakeStore) SetHideLeaderboardTail(_ context.Context, id string, hide bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g, ok := f.games[id]
+	if !ok {
+		return db.ErrNotFound
+	}
+	g.HideLeaderboardTail = hide
 	return nil
 }
 
@@ -451,6 +464,105 @@ func (f *fakeStore) RandomizeQuestionOrder(_ context.Context, gameID string) err
 	sort.Strings(ids)
 	for i, id := range ids {
 		f.questions[id].SortOrder = i + 1
+	}
+	return nil
+}
+
+func (f *fakeStore) ReplaceHostQuestions(_ context.Context, gameID string, items []db.HostQuestion) ([]db.Question, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for id, q := range f.questions {
+		if q.GameID == gameID && q.UserID == "" {
+			delete(f.questions, id)
+		}
+	}
+	out := []db.Question{}
+	for i, it := range items {
+		q := &db.Question{
+			ID:         f.nextID("question"),
+			GameID:     gameID,
+			UserID:     "",
+			Text:       it.Text,
+			AnswerType: it.AnswerType,
+			Options:    it.Options,
+			Correct:    it.Correct,
+			SortOrder:  i + 1,
+			CreatedAt:  f.now(),
+		}
+		f.questions[q.ID] = q
+		out = append(out, *q)
+	}
+	return out, nil
+}
+
+func (f *fakeStore) CreateHostQuestion(_ context.Context, gameID string, it db.HostQuestion) (*db.Question, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	max := 0
+	for _, q := range f.questions {
+		if q.GameID == gameID && q.SortOrder > max {
+			max = q.SortOrder
+		}
+	}
+	q := &db.Question{
+		ID:         f.nextID("question"),
+		GameID:     gameID,
+		Text:       it.Text,
+		AnswerType: it.AnswerType,
+		Options:    it.Options,
+		Correct:    it.Correct,
+		SortOrder:  max + 1,
+		CreatedAt:  f.now(),
+	}
+	f.questions[q.ID] = q
+	return q, nil
+}
+
+func (f *fakeStore) UpdateHostQuestion(_ context.Context, questionID string, it db.HostQuestion) (*db.Question, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	q, ok := f.questions[questionID]
+	if !ok || q.UserID != "" {
+		return nil, db.ErrNotFound
+	}
+	q.Text = it.Text
+	q.AnswerType = it.AnswerType
+	q.Options = it.Options
+	q.Correct = it.Correct
+	return q, nil
+}
+
+func (f *fakeStore) MoveQuestion(_ context.Context, gameID, questionID string, delta int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ordered := []*db.Question{}
+	for _, q := range f.questions {
+		if q.GameID == gameID {
+			ordered = append(ordered, q)
+		}
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].SortOrder != ordered[j].SortOrder {
+			return ordered[i].SortOrder < ordered[j].SortOrder
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
+	from := -1
+	for i, q := range ordered {
+		if q.ID == questionID {
+			from = i
+			break
+		}
+	}
+	if from < 0 {
+		return db.ErrNotFound
+	}
+	to := from + delta
+	if to >= 0 && to < len(ordered) {
+		ordered[from], ordered[to] = ordered[to], ordered[from]
+	}
+	for i, q := range ordered {
+		q.SortOrder = i + 1
 	}
 	return nil
 }

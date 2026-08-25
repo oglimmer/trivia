@@ -1,6 +1,6 @@
 # Trivia
 
-Mobile-first, real-time trivia game. Players upload a photo and a question; the host runs the round; everyone answers live; scores are revealed with a podium finish.
+Mobile-first, real-time trivia game. Players upload a photo and a question; the host runs the round; everyone answers live; scores are revealed with a podium finish. A second **Company Consensus mode** flips the format: the host imports survey-derived questions and teams guess the *most popular* answer rather than the correct one (see "Company Consensus mode" below).
 
 Stack: **Vue 3 + Vite + TypeScript** (frontend), **Go** (backend, chi + gorilla/websocket + pgx), **Postgres**. Single Docker Compose for local dev; a Helm chart ships the same app to Kubernetes. Live updates via WebSocket — no page refreshes. Optional SMTP integration sends players a one-click login link so they can rejoin a game on any device.
 
@@ -68,16 +68,119 @@ For yes/no and choice, the formula is `points = base + timeBonus` when correct:
 | 3-option choice      | 200  |                                          |
 | 4-option choice      | 300  | +100 per extra option above 4            |
 | number               | 300  | scored by rank — see below               |
+| poll (Company Consensus)   | —    | the chosen option's survey count — see below |
 
 ```
 timeBonus = base × 0.5 × max(0, 1 − responseMs / windowMs)
 ```
 
-…where `windowMs` is the game's configured answer window (default 30 s). At `t=0` the fastest answer earns up to `base × 1.5`; at the window's end the bonus is zero.
+…where `windowMs` is the game's configured answer window (default 30 s), passed into scoring from `games.question_timeout_seconds`. At `t=0` the fastest answer earns up to `base × 1.5`; at the window's end the bonus is zero. A 90 s question therefore decays over the full 90 s, not over a fixed 30 s.
 
 **Number questions** are rank-scored: every guess is compared to the target and the three closest get points scaled by closeness. Exact-or-near guesses (within `max(|c|·0.5%, 1)` of the target) get the full base + time bonus. Non-exact top-3 finishers get partial credit with rank weights `[1.0, 0.66, 0.33]` and **no** time bonus; closeness is `max(0, 1 − diff / max(|c|·0.5, 10))`, so wild guesses earn little even if they make the top 3. Wrong answers outside the top 3, and all wrong answers on yes/no & choice, score 0.
 
 See `backend/internal/game/scoring.go` and `scoring_test.go`.
+
+## Company Consensus mode
+
+A game created with `mode: "poll"` runs an entirely different format. Instead of
+guessing the correct answer, teams guess **what most people said** in a survey
+run before the event. Every one of the five options scores; the more people who
+gave that answer, the more it is worth.
+
+What changes:
+
+| | classic | poll |
+| --- | --- | --- |
+| Who writes the questions | one per player, in setup | the host imports them |
+| Photo per question | required | none |
+| Answer options | 2–4, one correct | exactly 5, all scoring |
+| Points | `base + timeBonus` by type | the option's survey count `+ timeBonus` |
+| Question order on start | shuffled | as uploaded |
+| Setup page for players | 3-step question editor | a lobby (teams just wait) |
+| Leaderboard suspense tail | on | off (a live TV board is the point) |
+
+**Teams** are modelled as ordinary players: one phone per team, the team name in
+the name field. Nothing in the schema knows about rosters.
+
+### Authoring the question set
+
+The admin console has a normal editor for this: **add**, **edit**, **remove**,
+and **↑ / ↓** to arrange the running order. Each question is a text field plus
+five answer rows (answer + points). Validation is inline, so the save button
+explains what is missing rather than failing on submit.
+
+| Endpoint | |
+| --- | --- |
+| `POST /api/admin/games/{code}/questions` | add one |
+| `PUT /api/admin/games/{code}/questions/{id}` | edit one, keeping its slot |
+| `POST /api/admin/games/{code}/questions/{id}/move` | `{"direction":"up"\|"down"}` |
+| `DELETE /api/admin/games/{code}/questions/{id}` | remove one |
+| `POST /api/admin/games/{code}/questions/import` | replace the whole set from JSON |
+
+All of them are **setup-only** and **poll-only**: once teams are playing, editing
+the set would orphan their answers, and in a classic game the questions belong to
+their player authors (`PUT` refuses any question with a non-NULL `user_id`).
+
+The editor always shows a question's answers **ranked by points**, which is how
+survey results arrive and how a human thinks about them. The stored order is
+shuffled and never surfaced.
+
+### Bulk import
+
+Still available, collapsed under "Bulk import from JSON" in the editor —
+convenient for dropping in a whole survey at once. It **replaces** every
+host-authored question in the game in one transaction; everything stays editable
+afterwards.
+
+```json
+{
+  "questions": [
+    {
+      "text": "Name something you always forget to pack.",
+      "answers": [
+        {"text": "Toothbrush", "points": 41},
+        {"text": "Phone charger", "points": 22},
+        {"text": "Socks", "points": 11},
+        {"text": "Sunscreen", "points": 7},
+        {"text": "Passport", "points": 4}
+      ]
+    }
+  ]
+}
+```
+
+`points` is however many survey respondents gave that answer. Exactly 5 answers
+per question, up to 50 questions, no duplicate answers within a question (case
+insensitive). Player-written questions in the same game are left untouched.
+
+Options are **shuffled on save** — on the single-question editor and the bulk
+import alike, both of which go through `buildPollQuestion`. Without that the top
+answer would always sit in the first slot and the game would collapse into
+"always tap the top row".
+
+Imported questions are stored with `user_id = NULL` — Postgres does not treat
+NULLs as equal, so the `UNIQUE (game_id, user_id)` index tolerates a whole set of
+them. The survey counts live on the `options` JSONB as `[{"text":…,"points":…}]`,
+and `correct` holds the JSON literal `null` (the column is `NOT NULL`, and no
+single answer is right).
+
+**The point values are withheld from players and from the board until the host
+reveals.** They are the answer: a phone that receives them early can read a
+perfect score off the network tab. `stripPollPoints` in `backend/internal/api/poll.go`
+enforces this on both the WebSocket envelope and the public questions endpoint.
+
+### The TV board
+
+`/g/{code}/board` is a read-only projector view — no player token, no leaderboard
+row, no ability to answer. It connects with `?role=board` as a third WebSocket
+role alongside `player` and `admin`, and receives the *player-facing* state, so a
+TV in the room never reveals points early.
+
+In setup it shows a scannable QR for the join URL and the teams as they arrive.
+During a question it hides the options and lights up each team name as they lock
+in. On reveal it fills the board in from #5 up to #1, and a standings rail runs
+along the bottom for the whole game. Open it from the admin console
+("📺 Open TV board") or navigate directly.
 
 ### Scheduled start & magic-link login
 
@@ -122,12 +225,14 @@ trivia/
 │       ├── 0005_orphan_on_user_delete.sql
 │       ├── 0006_user_last_seen.sql
 │       ├── 0007_images.sql            # images + image_variants tables, photo_image_id FKs
-│       └── 0008_drop_photo_b64.sql    # contract step: drop legacy base64 columns
+│       ├── 0008_drop_photo_b64.sql    # contract step: drop legacy base64 columns
+│       └── 0009_poll_questions.sql    # Company Consensus mode: 'poll' answer type + games.mode
 ├── frontend/
 │   ├── nginx.conf
 │   └── src/
-│       ├── pages/       # Landing, Join, Setup, Game, Results, Impersonate, Admin*
+│       ├── pages/       # Landing, Join, Setup, Game, Board, Results, Impersonate, Admin*
 │       ├── components/  # AppHeader, PhotoPicker, Spotlight, Stepper, ConfirmDialog, ProfileDialog
+│       │   └── admin/   # LiveQuestion, PlayersList, QuestionSubmissions, PollQuestions, PollQuestionForm, QuestionImport
 │       ├── composables/ # errMsg, useModal, useQuestionCountdown
 │       ├── services/    # api/ (admin, player, http), ws.ts, dialog.ts
 │       └── stores/game.ts

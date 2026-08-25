@@ -6,8 +6,19 @@ import (
 	"sort"
 )
 
-// AnswerWindowMs is the time after which no time bonus is awarded.
+// AnswerWindowMs is the fallback time bonus window, used when a caller does
+// not supply the game's own answer window.
 const AnswerWindowMs = 30_000
+
+// effectiveWindowMs resolves the window the time bonus decays over. Callers
+// pass the game's configured answer window so that a 90 s question rewards
+// speed across the whole 90 s; a non-positive value falls back to the default.
+func effectiveWindowMs(windowMs int) int {
+	if windowMs <= 0 {
+		return AnswerWindowMs
+	}
+	return windowMs
+}
 
 // basePoints derives a difficulty floor from the answer type and option count.
 // Reasoning: more options/harder answer space -> more points.
@@ -17,6 +28,9 @@ const AnswerWindowMs = 30_000
 //	choice with 3 options  200
 //	choice with 4 options  300
 //	number                 300 (open-ended)
+//
+// 'poll' does not go through basePoints at all: its points come from the
+// survey counts carried on each option.
 func basePoints(answerType string, optionCount int) int {
 	switch answerType {
 	case "yesno":
@@ -41,23 +55,25 @@ func basePoints(answerType string, optionCount int) int {
 	return 100
 }
 
-// timeBonus returns a value in [0, base/2] that decays linearly with response time.
-// A response at 0ms gets the full bonus, at AnswerWindowMs or later gets 0.
-func timeBonus(base, responseMs int) int {
+// timeBonus returns a value in [0, base/2] that decays linearly with response
+// time. A response at 0ms gets the full bonus, one at windowMs or later gets 0.
+func timeBonus(base, responseMs, windowMs int) int {
 	if responseMs < 0 {
 		responseMs = 0
 	}
-	if responseMs >= AnswerWindowMs {
+	w := effectiveWindowMs(windowMs)
+	if responseMs >= w {
 		return 0
 	}
-	frac := 1.0 - float64(responseMs)/float64(AnswerWindowMs)
+	frac := 1.0 - float64(responseMs)/float64(w)
 	return int(math.Round(float64(base) * 0.5 * frac))
 }
 
-// JudgeAnswer determines correctness and awards points for yes/no and choice
-// answers. Number answers are scored later via ScoreNumberAnswers (called at
-// reveal time) because their points depend on the whole field of guesses.
-func JudgeAnswer(answerType string, optionCount int, correct, answer json.RawMessage, responseMs int) (isCorrect bool, points int) {
+// JudgeAnswer determines correctness and awards points for yes/no, choice and
+// poll answers. windowMs is the game's configured answer window, over which the
+// time bonus decays; pass 0 for the AnswerWindowMs default. Number answers are scored later via ScoreNumberAnswers (called
+// at reveal time) because their points depend on the whole field of guesses.
+func JudgeAnswer(answerType string, optionCount int, options, correct, answer json.RawMessage, responseMs, windowMs int) (isCorrect bool, points int) {
 	base := basePoints(answerType, optionCount)
 	switch answerType {
 	case "yesno":
@@ -68,7 +84,7 @@ func JudgeAnswer(answerType string, optionCount int, correct, answer json.RawMes
 			return false, 0
 		}
 		if normYesNo(c) == normYesNo(a) {
-			return true, base + timeBonus(base, responseMs)
+			return true, base + timeBonus(base, responseMs, windowMs)
 		}
 		return false, 0
 	case "choice":
@@ -80,9 +96,27 @@ func JudgeAnswer(answerType string, optionCount int, correct, answer json.RawMes
 			return false, 0
 		}
 		if c == a {
-			return true, base + timeBonus(base, responseMs)
+			return true, base + timeBonus(base, responseMs, windowMs)
 		}
 		return false, 0
+	case "poll":
+		// Every option scores; the value is the survey count for that answer.
+		// isCorrect means "landed on the board at all", which for a five-option
+		// poll is everyone who answered — it drives the ✓ count on the
+		// leaderboard, not the points.
+		opts := ParsePollOptions(options)
+		var a int
+		if err := json.Unmarshal(answer, &a); err != nil {
+			return false, 0
+		}
+		if a < 0 || a >= len(opts) {
+			return false, 0
+		}
+		pts := opts[a].Points
+		if pts <= 0 {
+			return false, 0
+		}
+		return true, pts + timeBonus(pts, responseMs, windowMs)
 	case "number":
 		// Deferred: ScoreNumberAnswers handles this at reveal time.
 		return false, 0
@@ -118,7 +152,7 @@ func numberExactTolerance(c float64) float64 {
 // Rank weights of [1.0, 0.66, 0.33] are applied to non-exact top-3 finishers.
 // Closeness is `max(0, 1 - diff/scale)` where `scale = max(|c|*0.5, 10)`,
 // so very wild guesses earn little even if they happen to make the top 3.
-func ScoreNumberAnswers(correct json.RawMessage, answers []NumberAnswer) []NumberScore {
+func ScoreNumberAnswers(correct json.RawMessage, answers []NumberAnswer, windowMs int) []NumberScore {
 	out := make([]NumberScore, len(answers))
 	for i, a := range answers {
 		out[i] = NumberScore{UserID: a.UserID}
@@ -170,7 +204,7 @@ func ScoreNumberAnswers(correct json.RawMessage, answers []NumberAnswer) []Numbe
 			out[r.idx] = NumberScore{
 				UserID:    answers[r.idx].UserID,
 				IsCorrect: true,
-				Points:    base + timeBonus(base, r.responseMs),
+				Points:    base + timeBonus(base, r.responseMs, windowMs),
 			}
 			continue
 		}
@@ -199,17 +233,37 @@ func normYesNo(s string) string {
 	return s
 }
 
-// OptionCount inspects the raw options JSON to extract a count for 'choice'.
+// OptionCount inspects the raw options JSON to extract a count for 'choice'
+// and 'poll'.
 func OptionCount(answerType string, options json.RawMessage) int {
-	if answerType != "choice" {
-		if answerType == "yesno" {
-			return 2
+	switch answerType {
+	case "yesno":
+		return 2
+	case "choice", "poll":
+		var arr []any
+		if err := json.Unmarshal(options, &arr); err != nil {
+			return 0
 		}
-		return 0
+		return len(arr)
 	}
-	var arr []any
-	if err := json.Unmarshal(options, &arr); err != nil {
-		return 0
+	return 0
+}
+
+// PollOption is one of the survey answers offered for a 'poll' question. The
+// point value travels with the option instead of being derived from a formula:
+// it is how many survey respondents actually gave that answer.
+type PollOption struct {
+	Text   string `json:"text"`
+	Points int    `json:"points"`
+}
+
+// ParsePollOptions decodes the options column of a 'poll' question. A failure
+// yields nil, and every caller treats that as "no points available" rather
+// than guessing.
+func ParsePollOptions(options json.RawMessage) []PollOption {
+	var opts []PollOption
+	if err := json.Unmarshal(options, &opts); err != nil {
+		return nil
 	}
-	return len(arr)
+	return opts
 }

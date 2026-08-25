@@ -26,11 +26,12 @@
             Delete game
           </template>
         </button>
+        <a :href="`/g/${code}/board`" target="_blank" rel="noopener" class="btn-ghost btn-sm">📺 Open TV board</a>
         <RouterLink to="/admin/games" class="btn-ghost btn-sm" style="margin-left: auto;">← All games</RouterLink>
       </div>
 
-      <div v-if="game?.state === 'setup'" class="stack" style="gap: 12px;">
-        <div class="row wrap" style="gap: 16px; align-items: flex-end;">
+      <div v-if="game?.state === 'setup'" class="stack settings-block">
+        <div class="row wrap" style="gap: 16px; align-items: flex-start;">
           <div class="stack" style="gap: 4px; flex: 0 0 auto;">
             <label for="timeout-input" class="bold" style="margin: 0;">Question timeout</label>
             <div class="row" style="gap: 6px; align-items: center;">
@@ -54,10 +55,17 @@
                 v-model="scheduledDraft"
                 type="datetime-local"
               />
-              <button v-if="scheduledDraft" class="btn-link btn-sm" :disabled="savingSettings" @click="clearSchedule">Clear</button>
+              <button v-if="scheduledDraft" class="btn-ghost btn-sm" :disabled="savingSettings" @click="clearSchedule">Clear</button>
             </div>
           </div>
         </div>
+        <label class="check-row">
+          <input v-model="liveLeaderboardDraft" type="checkbox" />
+          <span>
+            Show the leaderboard for the whole game
+            <span class="muted">— off hides the last 3 questions for suspense</span>
+          </span>
+        </label>
         <button class="btn-ghost btn-sm" style="align-self: flex-start;" :disabled="savingSettings || !settingsDirty" @click="saveSettings">
           {{ savingSettings ? 'Saving…' : 'Save settings' }}
         </button>
@@ -72,7 +80,14 @@
 
     <!-- SETUP MODE -->
     <template v-if="game?.state === 'setup'">
+      <PollQuestions
+        v-if="isPoll"
+        :code="code"
+        :questions="questions"
+        @changed="load"
+      />
       <QuestionSubmissions
+        v-else
         :questions="questions"
         :users="users"
         :deleting-id="deletingQuestion"
@@ -188,6 +203,7 @@ import Leaderboard from '@/components/Leaderboard.vue'
 import ResultsBreakdown from '@/components/ResultsBreakdown.vue'
 import ImagePreviewModal from '@/components/ImagePreviewModal.vue'
 import QuestionSubmissions from '@/components/admin/QuestionSubmissions.vue'
+import PollQuestions from '@/components/admin/PollQuestions.vue'
 import PlayersList from '@/components/admin/PlayersList.vue'
 import LiveQuestion from '@/components/admin/LiveQuestion.vue'
 import type { Game, GameStateMsg, LeaderboardEntry, Question, QuestionResults, User, VoteUpdateMsg } from '@/types'
@@ -208,6 +224,8 @@ const online = ref<Set<string>>(new Set())
 const err = ref('')
 const timeoutDraft = ref(30)
 const scheduledDraft = ref('')
+// Inverted for the checkbox: the API field is hideLeaderboardTail.
+const liveLeaderboardDraft = ref(false)
 const savingSettings = ref(false)
 const deletingUser = ref('')
 const deletingQuestion = ref('')
@@ -245,6 +263,7 @@ async function load() {
     online.value = new Set(r.online || [])
     timeoutDraft.value = r.game?.questionTimeoutSeconds || 30
     scheduledDraft.value = isoToLocalInput(r.game?.scheduledAt)
+    liveLeaderboardDraft.value = r.game?.hideLeaderboardTail === false
   } catch (e) {
     err.value = errMsg(e)
   }
@@ -290,6 +309,7 @@ function applyState(d: GameStateMsg) {
     scheduledAt: d.scheduledAt,
     questionIndex: d.questionIndex,
     totalQuestions: d.totalQuestions,
+    mode: d.mode ?? game.value?.mode,
   }
   // Keep the edit fields in sync when we're not actively saving.
   if (d.state === 'setup' && !savingSettings.value) {
@@ -343,9 +363,12 @@ async function startGame() {
   catch (e) { err.value = errMsg(e) }
 }
 
+const isPoll = computed(() => game.value?.mode === 'poll')
+
 const settingsDirty = computed(() =>
   timeoutDraft.value !== (game.value?.questionTimeoutSeconds || 30) ||
-  scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt)
+  scheduledDraft.value !== isoToLocalInput(game.value?.scheduledAt) ||
+  liveLeaderboardDraft.value !== (game.value?.hideLeaderboardTail === false)
 )
 
 async function saveSettings() {
@@ -355,7 +378,11 @@ async function saveSettings() {
     await adminApi.updateSettings(props.code, {
       questionTimeoutSeconds: Number(timeoutDraft.value) || 30,
       scheduledAt: localInputToIso(scheduledDraft.value),
+      hideLeaderboardTail: !liveLeaderboardDraft.value,
     })
+    // The gameState broadcast doesn't carry this field, so mirror it locally
+    // or the form stays stuck on "dirty" after a successful save.
+    if (game.value) game.value.hideLeaderboardTail = !liveLeaderboardDraft.value
   } catch (e) {
     err.value = errMsg(e)
   } finally {
@@ -490,6 +517,19 @@ async function removeQuestion(q: Question) {
 </script>
 
 <style scoped>
+/* `.stack` uses margin-top, not gap, so an inline `gap` here would do nothing. */
+.settings-block { margin-top: 20px; }
+
+.check-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 1.4;
+  /* .stack spaces siblings with margin-top; a bare `margin: 0` would kill it. */
+  margin: 18px 0 0;
+}
+.check-row input { margin-top: 1px; }
+
 .state-pill {
   display: inline-block;
   padding: 4px 12px;

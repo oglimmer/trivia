@@ -90,6 +90,12 @@ body::before {
   padding: env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 32px);
 }
 
+/* Routes with meta.fullscreen (the TV board) size themselves off the viewport. */
+.app--fullscreen #app {
+  max-width: none;
+  padding: 0;
+}
+
 /* ---------- Typography ---------- */
 h1, h2, h3 {
   font-family: var(--font-display);
@@ -282,6 +288,40 @@ label {
   text-transform: uppercase;
   color: var(--ink);
   margin: 4px 0 6px;
+}
+
+/* Checkboxes and radios are not text fields — the rules above would stretch them
+   to 100% width with text-field padding. Keep the native control instead. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  appearance: auto;
+  -webkit-appearance: auto;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+input[type="checkbox"]:focus,
+input[type="radio"]:focus { box-shadow: none; transform: none; }
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+
+/* A label that wraps its own control is prose next to a box, not a field caption. */
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]) {
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
 }
 
 /* ---------- Header / shell ---------- */

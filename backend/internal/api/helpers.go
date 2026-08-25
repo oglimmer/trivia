@@ -27,6 +27,12 @@ const leaderboardSuspenseTail = 3
 
 // questionIndex > 0 already implies totalQuestions > 0, so no separate guard.
 func inLeaderboardSuspense(g *db.Game, totalQuestions, questionIndex int) bool {
+	// Poll games are built around a live board on a TV; hiding the standings
+	// for the closing stretch defeats the point, so hosts can switch the tail
+	// off per game (and poll games are created with it already off).
+	if !g.HideLeaderboardTail {
+		return false
+	}
 	if g.State == "finished" || questionIndex <= 0 {
 		return false
 	}

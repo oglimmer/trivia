@@ -98,6 +98,13 @@ export function wsConnectPlayer(token: string): void {
   reconnectNow()
 }
 
+// The projector view. No token: a TV in the room is not a participant, so it
+// gets no player identity, never lands on the leaderboard, and can only listen.
+export function wsConnectBoard(code: string): void {
+  url = `/ws?role=board&code=${encodeURIComponent(code)}`
+  reconnectNow()
+}
+
 export function wsConnectAdmin(adminToken: string, code: string): void {
   url = `/ws?role=admin&token=${encodeURIComponent(adminToken)}&code=${encodeURIComponent(code)}`
   reconnectNow()

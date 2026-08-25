@@ -17,6 +17,10 @@ type Role string
 const (
 	RolePlayer Role = "player"
 	RoleAdmin  Role = "admin"
+	// RoleBoard is the projector/TV view: read-only, not a participant. It
+	// carries no UserID, never appears on the leaderboard or in presence, and
+	// its inbound messages are ignored.
+	RoleBoard Role = "board"
 )
 
 type Client struct {
@@ -24,7 +28,7 @@ type Client struct {
 	conn    *websocket.Conn
 	send    chan []byte
 	GameID  string
-	UserID  string // empty for admin
+	UserID  string // empty for admin and board
 	Role    Role
 	OnClose func()
 }

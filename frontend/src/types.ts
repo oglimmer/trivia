@@ -5,7 +5,16 @@ export interface BackendBuildInfo {
   buildTime: string
 }
 
-export type AnswerType = 'yesno' | 'choice' | 'number'
+export type AnswerType = 'yesno' | 'choice' | 'number' | 'poll'
+export type GameMode = 'classic' | 'poll'
+
+// One survey answer behind a 'poll' question. `points` is how many survey
+// respondents gave this answer — it is withheld by the backend until the host
+// reveals, so it is optional on the wire.
+export interface PollOption {
+  text: string
+  points?: number
+}
 export type GameState = 'setup' | 'game' | 'finished'
 export type QuestionState = 'idle' | 'active' | 'revealed'
 
@@ -29,6 +38,8 @@ export interface Game {
   questionIndex?: number
   totalQuestions?: number
   leaderboardHidden?: boolean
+  mode?: GameMode
+  hideLeaderboardTail?: boolean
 }
 
 export interface Question {
@@ -37,7 +48,7 @@ export interface Question {
   text: string
   photoImageId?: string
   answerType: AnswerType
-  options?: string[]
+  options?: string[] | PollOption[]
   correct: string | number
 }
 
@@ -45,7 +56,9 @@ export interface Answer {
   id: string
   userId: string
   questionId: string
-  value: unknown
+  // The submitted payload, as sent by the backend (`answer` on the wire): an
+  // option index for choice/poll, "yes"/"no", or a number.
+  answer: unknown
   isCorrect: boolean
   points: number
   responseMs: number
@@ -64,7 +77,7 @@ export interface QuestionResults {
   photoImageId?: string
   authorName?: string
   answerType: AnswerType
-  options: string[]
+  options: string[] | PollOption[]
   correct: string | number
   totalPlayers: number
   answeredCount: number
@@ -153,6 +166,7 @@ export interface GameStateMsg {
   questionIndex?: number
   totalQuestions?: number
   leaderboardHidden?: boolean
+  mode?: GameMode
   question?: Question | null
   leaderboard?: LeaderboardEntry[]
   answers?: Answer[]
@@ -161,6 +175,15 @@ export interface GameStateMsg {
 
 export interface PlayerAnsweredMsg {
   userId: string
+  questionId?: string
+  responseMs?: number
+}
+
+// Sent only to a board connection on join, so a TV that refreshes mid-question
+// comes back with the right team names already lit.
+export interface AnsweredSnapshotMsg {
+  questionId: string
+  userIds: string[]
 }
 
 export interface PresenceMsg {
@@ -180,6 +203,7 @@ export type WSMessage =
   | { type: 'users'; data: User[] }
   | { type: 'questionsAdmin'; data: Question[] }
   | { type: 'playerAnswered'; data: PlayerAnsweredMsg }
+  | { type: 'answeredSnapshot'; data: AnsweredSnapshotMsg }
   | { type: 'presence'; data: PresenceMsg }
   | { type: 'answerAck'; data: AnswerAck }
   | { type: 'voteUpdate'; data: VoteUpdateMsg }

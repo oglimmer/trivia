@@ -10,6 +10,22 @@
       </div>
       <p class="muted" style="margin: 0;">Spin up a room, share the code, let chaos begin.</p>
 
+      <fieldset class="mode-picker">
+        <legend>Format</legend>
+        <label :class="['mode-card', mode === 'classic' && 'mode-card--on']">
+          <input v-model="mode" type="radio" value="classic" />
+          <span class="mode-card__icon" aria-hidden="true">🎤</span>
+          <span class="mode-card__title">Classic trivia</span>
+          <span class="mode-card__desc">Players photograph and write a question each. One right answer.</span>
+        </label>
+        <label :class="['mode-card', mode === 'poll' && 'mode-card--on']">
+          <input v-model="mode" type="radio" value="poll" />
+          <span class="mode-card__icon" aria-hidden="true">👥</span>
+          <span class="mode-card__title">Company Consensus</span>
+          <span class="mode-card__desc">You import survey questions. Teams guess the most popular answer; every option scores.</span>
+        </label>
+      </fieldset>
+
       <label for="game-name">Event name</label>
       <input id="game-name" v-model="name" placeholder="e.g. Family dinner — May 2025" />
 
@@ -20,13 +36,15 @@
       <input id="game-scheduled" v-model="scheduledAt" type="datetime-local" />
 
       <label for="game-timeout">Question timeout (seconds)</label>
-      <div class="row">
-        <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" />
-        <button class="btn-primary" :disabled="loading" @click="create" style="flex-shrink: 0;">
-          {{ loading ? '…' : 'Create' }}
-        </button>
-      </div>
+      <input id="game-timeout" v-model.number="timeoutSeconds" type="number" min="5" max="600" step="1" class="timeout-input" />
+      <p v-if="mode === 'poll'" class="field-hint">
+        Teams of 6–7 need time to argue. 90 seconds is a good starting point.
+      </p>
+
       <div v-if="err" class="error">{{ err }}</div>
+      <button class="btn-primary create-btn" :disabled="loading" @click="create">
+        {{ loading ? '…' : 'Create game' }}
+      </button>
     </div>
 
     <div v-if="games.length" class="stack">
@@ -60,19 +78,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi } from '@/services/api'
 import { errMsg } from '@/composables/errMsg'
 import { confirm } from '@/services/dialog'
 import { formatScheduled } from '@/utils/schedule'
-import type { AdminGamesEntry } from '@/types'
+import type { AdminGamesEntry, GameMode } from '@/types'
 
 const games = ref<AdminGamesEntry[]>([])
 const code = ref('')
 const name = ref('')
 const scheduledAt = ref('')
 const timeoutSeconds = ref(30)
+const mode = ref<GameMode>('classic')
 const loading = ref(false)
 const deleting = ref('')
 const err = ref('')
@@ -97,6 +116,13 @@ async function refresh() {
   }
 }
 
+// Poll questions are discussed by a whole team, so the classic 30s default is
+// far too tight. Nudge the field when the host picks the format.
+watch(mode, (m) => {
+  if (m === 'poll' && timeoutSeconds.value === 30) timeoutSeconds.value = 90
+  if (m === 'classic' && timeoutSeconds.value === 90) timeoutSeconds.value = 30
+})
+
 async function create() {
   err.value = ''
   loading.value = true
@@ -106,11 +132,13 @@ async function create() {
       name: name.value,
       questionTimeoutSeconds: Number(timeoutSeconds.value) || 30,
       scheduledAt: scheduledAt.value ? new Date(scheduledAt.value).toISOString() : null,
+      mode: mode.value,
     })
     code.value = ''
     name.value = ''
     scheduledAt.value = ''
     timeoutSeconds.value = 30
+    mode.value = 'classic'
     router.push(`/admin/games/${g.code}`)
   } catch (e) {
     err.value = errMsg(e)
@@ -209,4 +237,73 @@ async function remove(g: AdminGamesEntry) {
   .game-row { grid-template-columns: 1fr; }
   .game-row__code { justify-self: flex-start; }
 }
+
+.mode-picker {
+  border: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: grid;
+  gap: 10px;
+}
+/* Match the plain <label> treatment used by the other fields in this form. */
+.mode-picker legend {
+  padding: 0;
+  float: left;
+  width: 100%;
+  font-size: .82rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.mode-picker legend + * { clear: both; }
+
+.mode-card {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-areas: "radio icon title" "radio icon desc";
+  gap: 2px 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: var(--bw) solid var(--ink);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  background: var(--paper);
+  margin: 0;
+  transition: background .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+.mode-card:hover { background: var(--cream); }
+.mode-card--on,
+.mode-card--on:hover {
+  background: var(--yellow);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.mode-card input { grid-area: radio; margin-top: 2px; }
+.mode-card__icon {
+  grid-area: icon;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  align-self: start;
+}
+.mode-card__title {
+  grid-area: title;
+  font-weight: 800;
+  font-size: 1.02rem;
+}
+.mode-card__desc {
+  grid-area: desc;
+  font-size: .88rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.mode-card--on .mode-card__desc { color: var(--ink); opacity: .75; }
+
+.field-hint {
+  margin: 6px 0 0;
+  font-size: .85rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.timeout-input { max-width: 160px; }
+.create-btn { width: 100%; }
 </style>

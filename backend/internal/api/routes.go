@@ -40,6 +40,10 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/admin/games/{code}/users/{userId}", s.deleteUser)
 			r.Get("/admin/games/{code}/users/{userId}/impersonate", s.impersonateUser)
 			r.Delete("/admin/games/{code}/questions/{questionId}", s.deleteQuestion)
+			r.Post("/admin/games/{code}/questions/import", s.importQuestions)
+			r.Post("/admin/games/{code}/questions", s.createPollQuestion)
+			r.Put("/admin/games/{code}/questions/{questionId}", s.updatePollQuestion)
+			r.Post("/admin/games/{code}/questions/{questionId}/move", s.movePollQuestion)
 			r.Get("/admin/games/{code}/votes", s.adminVotes)
 		})
 

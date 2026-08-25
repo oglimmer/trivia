@@ -5,13 +5,14 @@ import { createPinia, setActivePinia } from 'pinia'
 vi.mock('@/services/ws', () => ({
   onMessage: vi.fn(),
   wsConnectPlayer: vi.fn(),
+  wsConnectBoard: vi.fn(),
 }))
 vi.mock('@/services/api', () => ({
   playerApi: { me: vi.fn() },
 }))
 
 import { useGameStore } from './game'
-import { onMessage, wsConnectPlayer } from '@/services/ws'
+import { onMessage, wsConnectBoard, wsConnectPlayer } from '@/services/ws'
 import { playerApi } from '@/services/api'
 import type {
   Answer,
@@ -229,9 +230,41 @@ describe('game store', () => {
       expect(s.connected).toBeNull()
     })
 
+    it('board connections track which teams have locked in', async () => {
+      const s = useGameStore()
+      s.ensureBoardWS('consensus')
+      expect(vi.mocked(wsConnectBoard)).toHaveBeenCalledWith('consensus')
+      const handler = vi.mocked(onMessage).mock.calls[0][0] as WSListener
+
+      handler({ type: 'gameState', data: { code: 'consensus', name: 'n', state: 'game', currentQuestionId: 'q1', questionState: 'active' } })
+      handler({ type: 'answeredSnapshot', data: { questionId: 'q1', userIds: ['u1', 'u2'] } })
+      expect(s.answeredUserIds).toEqual(['u1', 'u2'])
+
+      handler({ type: 'playerAnswered', data: { userId: 'u3', questionId: 'q1' } })
+      expect(s.answeredUserIds).toEqual(['u1', 'u2', 'u3'])
+
+      // Repeats must not double up — a reconnect replays the same event.
+      handler({ type: 'playerAnswered', data: { userId: 'u3', questionId: 'q1' } })
+      expect(s.answeredUserIds).toEqual(['u1', 'u2', 'u3'])
+
+      // An event for a question that is no longer current is ignored.
+      handler({ type: 'playerAnswered', data: { userId: 'u4', questionId: 'q-old' } })
+      expect(s.answeredUserIds).toEqual(['u1', 'u2', 'u3'])
+
+      // Moving to the next question clears the board.
+      handler({ type: 'gameState', data: { code: 'consensus', name: 'n', state: 'game', currentQuestionId: 'q2', questionState: 'active' } })
+      expect(s.answeredUserIds).toEqual([])
+    })
+
+    it('gameState carries the game mode through to the store', async () => {
+      const { s, handler } = await bootHandler()
+      handler({ type: 'gameState', data: { code: 'consensus', name: 'n', state: 'setup', mode: 'poll' } })
+      expect(s.game?.mode).toBe('poll')
+    })
+
     it('gameState answers default to empty array when missing', async () => {
       const { s, handler } = await bootHandler()
-      const a: Answer[] = [{ id: 'a1', userId: 'u1', questionId: 'q1', value: 1, isCorrect: true, points: 10, responseMs: 200 }]
+      const a: Answer[] = [{ id: 'a1', userId: 'u1', questionId: 'q1', answer: 1, isCorrect: true, points: 10, responseMs: 200 }]
       handler({ type: 'gameState', data: { code: 'A', name: 'n', state: 'game', answers: a } })
       expect(s.answers).toEqual(a)
       handler({ type: 'gameState', data: { code: 'A', name: 'n', state: 'game' } })

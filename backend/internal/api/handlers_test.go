@@ -165,7 +165,7 @@ func TestGetGameForJoin404(t *testing.T) {
 
 func TestGetGameForJoinHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code})
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
@@ -178,7 +178,7 @@ func TestGetGameForJoinHappy(t *testing.T) {
 
 func TestJoinGameRequiresName(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -191,7 +191,7 @@ func TestJoinGameRequiresName(t *testing.T) {
 
 func TestJoinGameAllowedMidGame(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
 	w := do(t, s, req{
 		method: "POST",
@@ -205,7 +205,7 @@ func TestJoinGameAllowedMidGame(t *testing.T) {
 
 func TestJoinGameRejectedWhenFinished(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_ = f.SetGameState(context.TODO(), g.ID, "finished")
 	w := do(t, s, req{
 		method: "POST",
@@ -219,7 +219,7 @@ func TestJoinGameRejectedWhenFinished(t *testing.T) {
 
 func TestJoinGameHappy(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -237,7 +237,7 @@ func TestJoinGameHappy(t *testing.T) {
 func TestJoinGameWithPhotoImageID(t *testing.T) {
 	s, f := testServer(t)
 	s.Images = newFakeImageStore("img-1")
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -257,7 +257,7 @@ func TestJoinGameWithPhotoImageID(t *testing.T) {
 
 func TestJoinGameRejectsDuplicateNameCaseInsensitive(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-existing")
 	w := do(t, s, req{
 		method: "POST",
@@ -275,8 +275,8 @@ func TestJoinGameRejectsDuplicateNameCaseInsensitive(t *testing.T) {
 
 func TestJoinGameAllowsSameNameInDifferentGames(t *testing.T) {
 	s, f := testServer(t)
-	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz A", 30, nil)
-	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz B", 30, nil)
+	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz A", 30, nil, "classic")
+	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz B", 30, nil, "classic")
 	_, _ = f.CreateUser(context.TODO(), g1.ID, "Alice", nil, "", "tok-g1")
 	w := do(t, s, req{
 		method: "POST",
@@ -290,7 +290,7 @@ func TestJoinGameAllowsSameNameInDifferentGames(t *testing.T) {
 
 func TestUpdateMeRejectsDuplicateNameCaseInsensitive(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
 	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
 	w := do(t, s, req{
@@ -306,7 +306,7 @@ func TestUpdateMeRejectsDuplicateNameCaseInsensitive(t *testing.T) {
 
 func TestUpdateMeAllowsSameNameForSelf(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
 	w := do(t, s, req{
 		method:   "PUT",
@@ -322,7 +322,7 @@ func TestUpdateMeAllowsSameNameForSelf(t *testing.T) {
 func TestJoinGameRejectsUnknownPhotoImageID(t *testing.T) {
 	s, f := testServer(t)
 	s.Images = newFakeImageStore() // empty
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/games/" + g.Code + "/join",
@@ -345,7 +345,7 @@ func TestMeRequiresPlayerToken(t *testing.T) {
 
 func TestMeReturnsUserAndGame(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-1")
 	w := do(t, s, req{method: "GET", path: "/api/me", playerTo: u.Token})
 	if w.Code != http.StatusOK {
@@ -371,7 +371,7 @@ func TestMeReturnsUserAndGame(t *testing.T) {
 func TestPutQuestionWithPhotoImageID(t *testing.T) {
 	s, f := testServer(t)
 	s.Images = newFakeImageStore("img-q")
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	u, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-author")
 
 	body := `{"text":"real?","photoImageId":"img-q","answerType":"yesno","options":[],"correct":"yes"}`
@@ -393,7 +393,7 @@ func TestPutQuestionWithPhotoImageID(t *testing.T) {
 func TestLeaderboardSurfacesPhotoImageID(t *testing.T) {
 	s, f := testServer(t)
 	s.Images = newFakeImageStore("img-le")
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	imgID := "img-le"
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", &imgID, "", "tok-a")
 	// Leaderboard is gated until the game is finished or a question is
@@ -419,7 +419,7 @@ func TestLeaderboardSurfacesPhotoImageID(t *testing.T) {
 // whether their answer was right.
 func TestLeaderboardHiddenUntilRevealed(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
 
 	// In-setup: must be empty.
@@ -449,7 +449,7 @@ func TestLeaderboardHiddenUntilRevealed(t *testing.T) {
 // anonymous caller must see none.
 func TestListQuestionsPublicHidesOthersCorrectUntilFinished(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
 	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
 
@@ -493,7 +493,7 @@ func TestListQuestionsPublicHidesOthersCorrectUntilFinished(t *testing.T) {
 // caller (the results screen needs them).
 func TestListQuestionsPublicExposesAllCorrectWhenFinished(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-alice")
 	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-bob")
 	_, _ = f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Alice's?", nil, "yesno",
@@ -521,7 +521,7 @@ func TestListQuestionsPublicExposesAllCorrectWhenFinished(t *testing.T) {
 
 func TestSetGameStateRejectsBad(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/state",
@@ -535,7 +535,7 @@ func TestSetGameStateRejectsBad(t *testing.T) {
 
 func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	// Put two questions on the game. SortOrder starts at 0 for both via Upsert.
 	_, _ = f.UpsertQuestion(context.TODO(), g.ID, "u-a", "q1?", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
@@ -577,7 +577,7 @@ func TestSetGameStateToGameShufflesAndClears(t *testing.T) {
 
 func TestSetGameStateToGamePrunesStalePlayers(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 
 	now := time.Now()
 	// Three users: one fresh (just created), one borderline-stale, one well-stale.
@@ -628,7 +628,7 @@ func TestSetGameStateToGamePrunesStalePlayers(t *testing.T) {
 
 func TestRevealRequiresActiveQuestion(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	w := do(t, s, req{
 		method: "POST",
 		path:   "/api/admin/games/" + g.Code + "/reveal",
@@ -641,7 +641,7 @@ func TestRevealRequiresActiveQuestion(t *testing.T) {
 
 func TestRevealRescoresNumberAnswers(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	// One number question, three players with varying closeness.
 	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "How many?", nil, "number",
 		json.RawMessage(`[]`), json.RawMessage(`100`))
@@ -683,7 +683,7 @@ func TestRevealRescoresNumberAnswers(t *testing.T) {
 
 func TestNextQuestionFinishesAtEnd(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	q, _ := f.UpsertQuestion(context.TODO(), g.ID, "author", "only", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
 	_ = f.SetGameState(context.TODO(), g.ID, "game")
@@ -711,7 +711,7 @@ func TestNextQuestionFinishesAtEnd(t *testing.T) {
 
 func TestResultsGatedOnFinished(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 
 	// Game not finished — endpoint returns an empty slice, not the data.
 	w := do(t, s, req{method: "GET", path: "/api/games/" + g.Code + "/results"})
@@ -725,7 +725,7 @@ func TestResultsGatedOnFinished(t *testing.T) {
 
 func TestResultsBreakdown(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-b")
 	_, _ = f.CreateUser(context.TODO(), g.ID, "Cara", nil, "", "tok-c")
@@ -792,7 +792,7 @@ func TestResultsBreakdown(t *testing.T) {
 
 func TestCastVoteRejectedBeforeFinished(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
 	q, _ := f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Q?", nil, "yesno",
 		json.RawMessage(`[]`), json.RawMessage(`"yes"`))
@@ -810,7 +810,7 @@ func TestCastVoteRejectedBeforeFinished(t *testing.T) {
 
 func TestCastVoteIsFinalAndCounted(t *testing.T) {
 	s, f := testServer(t)
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g.ID, "Alice", nil, "", "tok-a")
 	bob, _ := f.CreateUser(context.TODO(), g.ID, "Bob", nil, "", "tok-b")
 	q1, _ := f.UpsertQuestion(context.TODO(), g.ID, alice.ID, "Q1?", nil, "yesno",
@@ -885,8 +885,8 @@ func TestCastVoteIsFinalAndCounted(t *testing.T) {
 
 func TestCastVoteRejectsForeignQuestion(t *testing.T) {
 	s, f := testServer(t)
-	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz1", 30, nil)
-	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz2", 30, nil)
+	g1, _ := f.CreateGame(context.TODO(), "aaaa", "Quiz1", 30, nil, "classic")
+	g2, _ := f.CreateGame(context.TODO(), "bbbb", "Quiz2", 30, nil, "classic")
 	alice, _ := f.CreateUser(context.TODO(), g1.ID, "Alice", nil, "", "tok-a")
 	// A question that belongs to a different game.
 	other, _ := f.UpsertQuestion(context.TODO(), g2.ID, "author", "Q?", nil, "yesno",
@@ -908,7 +908,7 @@ func TestDeleteGameCancelsTimerAndDropsLock(t *testing.T) {
 	s, f := testServer(t)
 	imgs := newFakeImageStore()
 	s.Images = imgs
-	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil)
+	g, _ := f.CreateGame(context.TODO(), "abcd", "Quiz", 30, nil, "classic")
 	// Force lifecycle state populated.
 	s.lockFor(g.ID)                                // populate gameLocks
 	s.scheduleAutoClose(g.ID, "q-x", 24*time.Hour) // populate autoClose

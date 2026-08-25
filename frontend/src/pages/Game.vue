@@ -27,7 +27,7 @@
           </div>
         </header>
 
-        <div class="photo-frame">
+        <div v-if="q.photoImageId" class="photo-frame">
           <img
             :src="imageUrl(q.photoImageId, 'medium')"
             alt="question photo"
@@ -65,6 +65,19 @@
               @click="answer(i)"
             >
               <span class="option-btn__bullet">{{ letters[i] }}</span>{{ opt }}
+            </button>
+          </div>
+          <div v-else-if="q.answerType === 'poll'" class="stack">
+            <div class="muted center bold" style="font-size: .85rem; letter-spacing: .04em;">
+              👥 What did most people say?
+            </div>
+            <button
+              v-for="(opt, i) in pollOptions"
+              :key="i"
+              class="option-btn"
+              @click="answer(i)"
+            >
+              <span class="option-btn__bullet">{{ letters[i] }}</span>{{ opt.text }}
             </button>
           </div>
           <div v-else-if="q.answerType === 'number'" class="stack">
@@ -113,6 +126,20 @@
               :class="['option-btn', i === correctIndex ? 'correct' : 'wrong']"
             >
               <span class="option-btn__bullet">{{ letters[i] }}</span>{{ opt }}
+            </div>
+          </div>
+          <div v-else-if="q.answerType === 'poll'" class="stack">
+            <div class="muted center bold" style="font-size: .85rem; letter-spacing: .04em;">
+              WHAT PEOPLE SAID
+            </div>
+            <div
+              v-for="row in pollBoard"
+              :key="row.index"
+              :class="['option-btn', 'poll-row', row.index === myPollPick && 'correct']"
+            >
+              <span class="option-btn__bullet">{{ row.rank }}</span>
+              <span class="poll-row__text">{{ row.text }}</span>
+              <span class="poll-row__pts">{{ row.points }}</span>
             </div>
           </div>
           <div v-else-if="q.answerType === 'number'" class="card card--yellow center">
@@ -166,6 +193,7 @@ import { imageUrl } from '@/services/images'
 import { useQuestionCountdown } from '@/composables/useQuestionCountdown'
 import { useWrongSoundEffect } from '@/composables/useWrongSoundEffect'
 import { pickVerdictLine } from '@/utils/verdict'
+import type { PollOption } from '@/types'
 import Leaderboard from '@/components/Leaderboard.vue'
 import ScoringInfoDialog from '@/components/ScoringInfoDialog.vue'
 
@@ -176,7 +204,7 @@ const router = useRouter()
 const store = useGameStore()
 
 const numberGuess = ref<number | ''>('')
-const letters = ['A', 'B', 'C', 'D']
+const letters = ['A', 'B', 'C', 'D', 'E']
 const initialReady = ref(false)
 const animateVerdict = ref(false)
 const scoringInfoOpen = ref(false)
@@ -196,6 +224,26 @@ const leaderboardHidden = computed(() => !!store.game?.leaderboardHidden)
 const ack = computed(() => store.lastAnswerAck && q.value && store.lastAnswerAck.questionId === q.value.id ? store.lastAnswerAck : null)
 const leaderboard = computed(() => store.leaderboard)
 const myId = computed(() => store.me && store.me.id)
+
+// Poll options arrive as {text, points}; points are withheld until the reveal.
+const pollOptions = computed<PollOption[]>(() => {
+  if (!q.value || q.value.answerType !== 'poll') return []
+  return (q.value.options || []) as PollOption[]
+})
+
+const myPollPick = computed(() => {
+  const raw = myAnswer.value?.answer
+  return typeof raw === 'number' ? raw : -1
+})
+
+// The reveal board is ranked by survey count, not by the order the options were
+// shown in — that ranking is the payoff of the format.
+const pollBoard = computed(() => {
+  return pollOptions.value
+    .map((o, index) => ({ index, text: o.text, points: o.points ?? 0 }))
+    .sort((a, b) => b.points - a.points)
+    .map((row, i) => ({ ...row, rank: i + 1 }))
+})
 
 const correctYes = computed(() => q.value && q.value.correct === 'yes')
 const correctIndex = computed(() => q.value ? Number(q.value.correct) : -1)
@@ -225,6 +273,7 @@ const myAnswer = computed(() => (store.answers || []).find(a => a.userId === myI
 
 const verdict = computed(() => {
   const seed = (q.value && q.value.id) || ''
+  if (q.value?.answerType === 'poll') return pollVerdict.value
   if (!myAnswer.value) {
     return { kind: 'none' as const, emoji: '👻', ...pickVerdictLine('none', seed) }
   }
@@ -232,6 +281,34 @@ const verdict = computed(() => {
     return { kind: 'correct' as const, emoji: '🎉', ...pickVerdictLine('correct', seed) }
   }
   return { kind: 'wrong' as const, emoji: '💥', ...pickVerdictLine('wrong', seed) }
+})
+
+// Nothing is "wrong" in a poll — every listed answer scores. The verdict says
+// where the team landed against the crowd instead of passing judgement.
+const pollVerdict = computed(() => {
+  const seed = (q.value && q.value.id) || ''
+  if (!myAnswer.value) {
+    return { kind: 'none' as const, emoji: '👻', ...pickVerdictLine('none', seed) }
+  }
+  const top = pollBoard.value[0]
+  const mine = pollBoard.value.find(r => r.index === myPollPick.value)
+  if (!mine) {
+    return { kind: 'none' as const, emoji: '👻', ...pickVerdictLine('none', seed) }
+  }
+  if (mine.rank === 1) {
+    return {
+      kind: 'correct' as const,
+      emoji: '🥇',
+      headline: 'TOP ANSWER!',
+      sub: `${mine.points} people said "${mine.text}". So did you.`,
+    }
+  }
+  return {
+    kind: 'correct' as const,
+    emoji: '📊',
+    headline: `#${mine.rank} ON THE BOARD`,
+    sub: `"${mine.text}" scored ${mine.points}. Top was "${top?.text}" with ${top?.points}.`,
+  }
 })
 
 async function markReady() {
@@ -278,7 +355,9 @@ watch(qState, (newVal) => {
 
 watch(qState, (newVal) => {
   if (!pageLoaded) return
-  if (newVal === 'revealed' && verdict.value.kind === 'wrong') {
+  // No losing sound in poll mode: every option on the board scores, so the
+  // sting would fire on a perfectly good answer.
+  if (newVal === 'revealed' && verdict.value.kind === 'wrong' && q.value?.answerType !== 'poll') {
     wrongSound.play()
   }
 }, { flush: 'post' })

@@ -239,7 +239,11 @@ func (s *Server) rescoreNumberAnswers(ctx context.Context, questionID string) er
 	for i, a := range ans {
 		inputs[i] = game.NumberAnswer{UserID: a.UserID, Answer: a.Answer, ResponseMs: a.ResponseMs}
 	}
-	scores := game.ScoreNumberAnswers(q.Correct, inputs)
+	windowMs := 0
+	if g, gerr := s.DB.GameByID(ctx, q.GameID); gerr == nil && g != nil {
+		windowMs = g.QuestionTimeoutSeconds * 1000
+	}
+	scores := game.ScoreNumberAnswers(q.Correct, inputs, windowMs)
 	for _, sc := range scores {
 		if err := s.DB.UpdateAnswerScore(ctx, questionID, sc.UserID, sc.IsCorrect, sc.Points); err != nil {
 			return err

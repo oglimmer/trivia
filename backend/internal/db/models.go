@@ -17,6 +17,8 @@ type Game struct {
 	QuestionClosedAt       *time.Time `json:"questionClosedAt,omitempty"`
 	QuestionTimeoutSeconds int        `json:"questionTimeoutSeconds"`
 	ScheduledAt            *time.Time `json:"scheduledAt,omitempty"`
+	Mode                   string     `json:"mode"`
+	HideLeaderboardTail    bool       `json:"hideLeaderboardTail"`
 	CreatedAt              time.Time  `json:"createdAt"`
 }
 

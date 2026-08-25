@@ -23,6 +23,7 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 			"questionStartedAt":      g.QuestionStartedAt,
 			"questionTimeoutSeconds": g.QuestionTimeoutSeconds,
 			"scheduledAt":            g.ScheduledAt,
+			"mode":                   g.Mode,
 			// serverNow lets clients compute their clock offset vs. the server
 			// so the question countdown stays accurate regardless of local clock skew.
 			"serverNow": time.Now().UTC(),
@@ -46,12 +47,18 @@ func (s *Server) gameStateEnvelope(ctx context.Context, g *db.Game, asAdmin bool
 	data["questionIndex"] = questionIndex
 
 	if current != nil {
+		// Poll options carry their survey point values. Those values ARE the
+		// answer, so they only go out to the admin or after the reveal.
+		opts := current.Options
+		if !asAdmin && g.QuestionState != "revealed" {
+			opts = stripPollPoints(current.AnswerType, opts)
+		}
 		qd := map[string]any{
 			"id":           current.ID,
 			"text":         current.Text,
 			"photoImageId": current.PhotoImageID,
 			"answerType":   current.AnswerType,
-			"options":      current.Options,
+			"options":      opts,
 			"userId":       current.UserID,
 		}
 		if asAdmin || g.QuestionState == "revealed" {
@@ -84,7 +91,11 @@ func (s *Server) broadcastGameState(ctx context.Context, gameID string) {
 	}
 	playerMsg := s.gameStateEnvelope(ctx, g, false)
 	adminMsg := s.gameStateEnvelope(ctx, g, true)
-	s.Hub.BroadcastTo(gameID, playerMsg, func(c *ws.Client) bool { return c.Role == ws.RolePlayer })
+	// The board is a TV in the room, so it gets the player-facing view: it must
+	// not reveal poll points early just because nobody is holding it.
+	s.Hub.BroadcastTo(gameID, playerMsg, func(c *ws.Client) bool {
+		return c.Role == ws.RolePlayer || c.Role == ws.RoleBoard
+	})
 	s.Hub.BroadcastTo(gameID, adminMsg, func(c *ws.Client) bool { return c.Role == ws.RoleAdmin })
 }
 
