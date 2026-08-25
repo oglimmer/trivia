@@ -21,28 +21,28 @@ describe('useI18n', () => {
     setLanguage('en')
     const { t, locale } = useI18n()
     expect(locale).toBe('en')
-    expect(t('heroEyebrow')).toBe('Bring-your-own-question')
+    expect(t('heroEyebrow')).toBe('Two ways to play')
   })
 
   it('composes the hero motto HTML correctly for English', () => {
     setLanguage('en')
     const { t } = useI18n()
     const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
-    expect(full).toBe('Game <em>night</em>,<br />made by you.')
+    expect(full).toBe('Game <em>night</em>,<br />written by your people.')
   })
 
   it('composes the hero motto HTML correctly for German', () => {
     setLanguage('de')
     const { t } = useI18n()
     const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
-    expect(full).toBe('Spiel <em>Nacht</em>,<br />gemacht von dir.')
+    expect(full).toBe('Spiel <em>Nacht</em>,<br />geschrieben von euch.')
   })
 
   it('composes the hero motto HTML correctly for French', () => {
     setLanguage('fr')
     const { t } = useI18n()
     const full = t('heroMottoPrefix') + '<em>' + t('heroMottoEm') + '</em>,<br />' + t('heroMottoSuffix')
-    expect(full).toBe('Soirée <em>jeux</em>,<br />faite par vous.')
+    expect(full).toBe('Soirée <em>jeux</em>,<br />écrite par vos équipes.')
   })
 
   it('returns French when browser language is fr', () => {
@@ -56,6 +56,29 @@ describe('useI18n', () => {
     const { locale, t } = useI18n()
     expect(locale).toBe('en')
     expect(t('heroSubtitle')).toBe('Type the code your host shared.')
+  })
+
+  // The landing page copy for the two game formats is the largest block of
+  // strings here, so guard that no locale silently falls back to English.
+  it('translates the game format copy in every locale', () => {
+    const formatKeys = [
+      'formatsHeading', 'formatsLede',
+      'classicName', 'classicWho', 'classicCaption', 'classicQuestion', 'classicRule',
+      'pollWho', 'pollCaption', 'pollQuestion', 'pollRule',
+      'hostBoardNote',
+    ]
+
+    setLanguage('en')
+    const en = useI18n().t
+
+    for (const lang of ['de', 'fr']) {
+      setLanguage(lang)
+      const { t } = useI18n()
+      for (const key of formatKeys) {
+        expect(t(key), `${lang}.${key} is missing`).not.toBe(key)
+        expect(t(key), `${lang}.${key} falls back to English`).not.toBe(en(key))
+      }
+    }
   })
 
   it('returns key if missing in both locale and English fallback', () => {
