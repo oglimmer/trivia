@@ -153,6 +153,16 @@ afterwards.
 per question, up to 50 questions, no duplicate answers within a question (case
 insensitive). Player-written questions in the same game are left untouched.
 
+If the survey lives in a spreadsheet, export it as CSV and convert it:
+
+```sh
+cd backend && go run ./cmd/csv2json -o questions.json survey.csv
+```
+
+The CSV needs a `Question` column plus `Option 1`/`Points 1` … `Option 5`/`Points 5`
+(order does not matter, extra columns are ignored). Every row is checked against
+the rules above and all problems are listed with their CSV line number.
+
 Options are **shuffled on save** — on the single-question editor and the bulk
 import alike, both of which go through `buildPollQuestion`. Without that the top
 answer would always sit in the first slot and the game would collapse into
