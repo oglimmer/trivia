@@ -80,10 +80,22 @@
       </ol>
     </section>
 
-    <!-- Final -->
-    <section v-else-if="state === 'finished'" class="board__center">
-      <h1 class="board__title">🏆 {{ winnerName || 'That\'s a wrap' }}</h1>
-      <p v-if="winnerName" class="board__kicker">wins IRL trivia with {{ leaderboard[0]?.points }} points</p>
+    <!-- Final: the classic 2nd | 1st | 3rd podium -->
+    <section v-else-if="state === 'finished'" class="board__final">
+      <h1 class="board__title">🏆 That's a wrap</h1>
+      <ol v-if="podium.length" class="board__podium">
+        <li
+          v-for="(p, i) in podium"
+          :key="p.userId"
+          :class="['board__step', `board__step--slot${i + 1}`, `board__step--place${p.place}`]"
+          :style="`--delay:${(podium.length - 1 - i) * 700}ms`"
+        >
+          <span class="board__step-medal" aria-hidden="true">{{ medals[p.place - 1] }}</span>
+          <span class="board__step-name">{{ p.userName }}</span>
+          <span class="board__step-pts">{{ p.points }} pts</span>
+          <div class="board__step-block">{{ ordinals[p.place - 1] }}</div>
+        </li>
+      </ol>
     </section>
 
     <!-- Standings rail, always on once there is something to show -->
@@ -130,7 +142,17 @@ const users = computed(() => store.users)
 const leaderboard = computed(() => store.leaderboard)
 const answeredIds = computed(() => new Set(store.answeredUserIds))
 const answeredCount = computed(() => answeredIds.value.size)
-const winnerName = computed(() => store.leaderboard[0]?.userName || '')
+
+// Top three with competition ranking (1, 1, 3) so a tie shares a step height
+// and a medal instead of one team quietly landing a place lower.
+const medals = ['🥇', '🥈', '🥉']
+const ordinals = ['1st', '2nd', '3rd']
+const podium = computed(() =>
+  store.leaderboard.slice(0, 3).map((s) => ({
+    ...s,
+    place: 1 + store.leaderboard.filter((o) => o.points > s.points).length,
+  })),
+)
 
 const joinUrl = computed(() => `${location.origin}/g/${props.code}/join`)
 // Typed off a screen across a room, so drop the protocol — it is pure noise
@@ -164,9 +186,13 @@ onMounted(async () => {
 
 <style scoped>
 /* The board is the only view designed for a room rather than a hand, so it
-   opts out of the app's mobile-first sizing entirely and scales off vw. */
+   opts out of the app's mobile-first sizing entirely and scales off vw.
+   It is a fixed frame on the TV: it never scrolls, so the standings at the
+   bottom always stay on screen and the content shrinks to fit instead. */
 .board {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   padding: clamp(24px, 3.2vw, 72px);
   display: flex;
   flex-direction: column;
@@ -194,6 +220,7 @@ onMounted(async () => {
    both rows so the teams list gets the full text column as it fills up. */
 .board__lobby {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -241,7 +268,7 @@ onMounted(async () => {
   border: 4px solid var(--ink, #1a1a1a);
   box-shadow: 8px 8px 0 var(--ink, #1a1a1a);
 }
-.board__qr img { display: block; width: clamp(220px, 30vw, 540px); height: auto; }
+.board__qr img { display: block; width: clamp(220px, min(30vw, 55vh), 540px); height: auto; }
 .board__qr-fallback { max-width: 26vw; word-break: break-all; font-weight: 700; }
 
 .board__teams {
@@ -277,6 +304,7 @@ onMounted(async () => {
 /* ---- play ---- */
 .board__center {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -284,7 +312,7 @@ onMounted(async () => {
   gap: 18px;
   text-align: center;
 }
-.board__play { flex: 1; display: flex; flex-direction: column; gap: clamp(12px, 1.8vw, 30px); }
+.board__play { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: clamp(12px, 1.8vw, 30px); }
 .board__play-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .board__pill {
   font-weight: 900;
@@ -303,12 +331,12 @@ onMounted(async () => {
 }
 .board__timer--low { color: var(--coral, #ff6b6b); animation: board-pulse .9s ease-in-out infinite; }
 .board__question {
-  font-size: clamp(1.8rem, 4.2vw, 4.4rem);
+  font-size: clamp(1.8rem, min(4.2vw, 7vh), 4.4rem);
   line-height: 1.06;
   margin: 0;
 }
 
-.board__answering { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(12px, 1.6vw, 28px); }
+.board__answering { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: clamp(12px, 1.6vw, 28px); }
 .board__lockins { display: flex; flex-wrap: wrap; gap: 12px; }
 .board__lockin {
   padding: .35em 1em;
@@ -328,27 +356,32 @@ onMounted(async () => {
 .board__lockin-tick { margin-right: .5em; font-weight: 900; }
 
 /* Fill the space between the question and the standings rail so a short answer
-   list does not leave the bottom third of the screen empty. */
+   list does not leave the bottom third of the screen empty. It is a size
+   container so the rows can scale off the height that is left (cqh) — five
+   rows at full size push the standings off a 1080p screen. */
 .board__rows {
   list-style: none;
   margin: 0;
   padding: 0;
   flex: 1;
+  min-height: 0;
+  container-type: size;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: clamp(8px, 1vw, 16px);
+  gap: clamp(6px, min(1vw, 1.5vh), 16px);
 }
 .board__row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: clamp(12px, 1.6vw, 28px);
-  padding: clamp(8px, 1.1vw, 20px) clamp(12px, 1.6vw, 28px);
+  padding: clamp(4px, min(1.1vw, 1.6cqh), 20px) clamp(12px, 1.6vw, 28px);
   border: 4px solid var(--ink, #1a1a1a);
   background: var(--cream, #fff8e7);
   box-shadow: 6px 6px 0 var(--ink, #1a1a1a);
-  font-size: clamp(1.2rem, 2.4vw, 2.8rem);
+  font-size: clamp(1rem, min(2.4vw, 7cqh), 2.8rem);
+  line-height: 1.15;
   font-weight: 800;
   animation: board-flip .38s ease-out both;
   animation-delay: var(--delay, 0ms);
@@ -363,8 +396,66 @@ onMounted(async () => {
 .board__row-text { min-width: 0; }
 .board__row-pts { font-variant-numeric: tabular-nums; font-weight: 900; }
 
+/* ---- final podium ----
+   A size container like the reveal rows: the steps scale off the height left
+   above the standings rail, so the board still never scrolls. */
+.board__final {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 2vh, 28px);
+  text-align: center;
+}
+.board__podium {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  width: min(100%, 1400px);
+  container-type: size;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas: "second first third";
+  align-items: end;
+  gap: clamp(10px, 1.6vw, 28px);
+}
+.board__step {
+  display: flex;
+  flex-direction: column;
+  gap: .15em;
+  min-width: 0;
+  font-size: clamp(1rem, min(2.4vw, 6cqh), 2.8rem);
+  animation: board-rise .6s ease-out both;
+  animation-delay: var(--delay, 0ms);
+}
+.board__step--slot1 { grid-area: first; }
+.board__step--slot2 { grid-area: second; }
+.board__step--slot3 { grid-area: third; }
+.board__step-medal { font-size: 1.5em; line-height: 1; }
+.board__step-name { font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+.board__step-pts { font-weight: 700; opacity: .7; font-variant-numeric: tabular-nums; }
+.board__step-block {
+  height: 22cqh;
+  margin-top: .3em;
+  padding-top: .15em;
+  border: 4px solid var(--ink, #1a1a1a);
+  box-shadow: 6px 6px 0 var(--ink, #1a1a1a);
+  background: var(--peach, #ffb39c);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 2em;
+  line-height: 1;
+}
+.board__step--place1 .board__step-block { height: 50cqh; background: var(--yellow, #ffe066); }
+.board__step--place2 .board__step-block { height: 36cqh; background: #dcdfe7; }
+
 /* ---- standings ---- */
 .board__standings {
+  flex-shrink: 0;
   border-top: 4px solid var(--ink, #1a1a1a);
   padding-top: clamp(8px, 1vw, 18px);
 }
@@ -414,12 +505,18 @@ onMounted(async () => {
 @keyframes board-spin { to { transform: rotate(360deg); } }
 @keyframes board-pop { from { transform: scale(.8); opacity: 0; } }
 @keyframes board-pulse { 50% { opacity: .45; } }
+@keyframes board-rise { from { transform: translateY(40px); opacity: 0; } }
 @keyframes board-flip {
   from { transform: translateY(14px) rotateX(-70deg); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
 
 @media (max-width: 900px) {
+  /* A phone or a narrow window is not the TV: let it scroll rather than clip. */
+  .board { height: auto; min-height: 100dvh; overflow: visible; }
+  .board__rows, .board__podium { container-type: normal; }
+  .board__lobby, .board__play, .board__answering, .board__rows,
+  .board__final, .board__podium { min-height: auto; }
   .board__lobby {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "left" "qr" "teams";
@@ -428,7 +525,7 @@ onMounted(async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board__row, .board__team-list li { animation: none; }
+  .board__row, .board__step, .board__team-list li { animation: none; }
   .board__timer--low { animation: none; }
 }
 </style>
